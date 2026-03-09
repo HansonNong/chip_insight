@@ -1,75 +1,133 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy.ndimage import gaussian_filter1d
+from typing import Any
 import os
+import re
 
-def plot_advanced_cyq(file_path):
-    if not os.path.exists(file_path):
-        print(f"File not found: {file_path}")
-        return
+class ChipDistVisualizer:
+    def __init__(self, bin_count: int = 250, decay_threshold: float = 0.00001, smoothing: float = 1.0):
+        self.bin_count = bin_count
+        self.decay_threshold = decay_threshold
+        self.smoothing = smoothing
 
-    df = pd.read_excel(file_path)
-    df['day'] = pd.to_datetime(df['day'])
-    df = df.sort_values('day').reset_index(drop=True)
-    
-    min_p, max_p = df['close'].min() * 0.9, df['close'].max() * 1.1
-    price_bins = np.linspace(min_p, max_p, 150)
-    chips = np.zeros_like(price_bins)
-    
-    print("Calculating historical chip evolution...")
-    for _, row in df.iterrows():
-        turnover = row['turnover_rate']
-        close_p = row['close']
+    def _calculate_concentration(self, bins: np.ndarray, chips: np.ndarray, ratio: float = 0.9) -> str:
+        total = np.sum(chips)
+        if total <= 0: return "N/A"
+        cumsum = np.cumsum(chips) / total
+        tail = (1 - ratio) / 2
+        idx_low = np.searchsorted(cumsum, tail)
+        idx_high = np.searchsorted(cumsum, 1 - tail)
+        idx_low, idx_high = max(0, min(idx_low, len(bins)-1)), max(0, min(idx_high, len(bins)-1))
+        p_low, p_high = bins[idx_low], bins[idx_high]
+        denom = p_high + p_low
+        return f"{(p_high - p_low) / denom:.2%}" if denom != 0 else "0.00%"
+
+    def _infer_interval(self, df: pd.DataFrame) -> str:
+        if len(df) < 2: return ""
+        diffs = df['day'].diff().dt.total_seconds() / 60
+        common = diffs.mode()
+        if common.empty: return "Unknown"
+        d = common.iloc[0]
+        if d <= 1: return "1min"
+        elif d <= 5: return "5min"
+        elif d <= 65: return "60min"
+        elif d <= 300: return "Daily"
+        return "Weekly"
+
+    def generate_distribution(self, df: pd.DataFrame) -> dict[str, Any]:
+        df['day'] = pd.to_datetime(df['day'])
+        df = df.dropna(subset=['close', 'turnover_rate']).sort_values('day').reset_index(drop=True)
+        if df.empty: return {}
+
+        # 1. Prepare bins based on FULL history to capture all price levels
+        all_min, all_max = df['close'].min(), df['close'].max()
+        price_bins = np.linspace(all_min * 0.95, all_max * 1.05, self.bin_count)
+        chips = np.zeros_like(price_bins)
         
-        chips = chips * (1 - turnover)
-        idx = np.abs(price_bins - close_p).argmin()
-        chips[idx] += turnover
+        # Track chip survival for visual cropping
+        survival_weight = np.ones(len(df))
+        
+        # 2. FULL calculation: Process every row to accumulate chips correctly
+        for i, row in df.iterrows():
+            t_rate = float(row['turnover_rate'])
+            chips *= (1 - t_rate)
+            idx = np.abs(price_bins - float(row['close'])).argmin()
+            chips[idx] += t_rate
+            
+            # Record how much of THIS specific day's chip remains at the end
+            # This helps us find the "Effective Start" date for the chart
+            if i < len(df) - 1:
+                survival_weight[:i+1] *= (1 - t_rate)
 
-    last_price = df['close'].iloc[-1]
-    total_chips = np.sum(chips)
-    
-    profit_chips = np.sum(chips[price_bins <= last_price])
-    profit_ratio = (profit_chips / total_chips) * 100
-    hold_up_ratio = 100 - profit_ratio
-    avg_price = np.sum(price_bins * chips) / total_chips
+        # 3. Find effective start based on decay_threshold
+        # We look for the first index where the historical chips still have influence
+        start_idx = np.where(survival_weight > self.decay_threshold)[0]
+        start_idx = start_idx[0] if len(start_idx) > 0 else 0
+        effective_df = df.iloc[start_idx:].copy()
 
-    fig, ax1 = plt.subplots(figsize=(12, 7))
-    plt.subplots_adjust(right=0.85)
+        # 4. Apply smoothing to make it look like professional software (THS)
+        if self.smoothing > 0:
+            chips = gaussian_filter1d(chips, sigma=self.smoothing)
 
-    ax1.plot(df['day'], df['close'], color='blue', label='Close Price', linewidth=1.5, alpha=0.8)
-    ax1.set_ylabel('Price (Yuan)')
-    ax1.set_xlabel('Date')
-    
-    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
-    plt.xticks(rotation=45)
-    ax1.grid(True, linestyle='--', alpha=0.6)
+        last_p = float(df['close'].iloc[-1])
+        total_sum = np.sum(chips)
+        avg_p = np.sum(price_bins * chips) / total_sum if total_sum > 0 else 0
+        profit_r = (np.sum(chips[price_bins <= last_p]) / total_sum) * 100 if total_sum > 0 else 0
 
-    ax2 = ax1.twiny()
-    ax2.barh(price_bins, chips, height=(max_p-min_p)/150, color='orange', alpha=0.6, label='Chips')
-    ax2.set_xlabel('Chip Density')
-    ax2.set_xticks([]) 
+        return {
+            "price_bins": price_bins, "chips": chips, "last_price": last_p,
+            "avg_price": avg_p, "profit_ratio": profit_r,
+            "start_date": effective_df['day'].iloc[0], 
+            "effective_df": effective_df,
+            "y_range": [effective_df['close'].min() * 0.95, effective_df['close'].max() * 1.05],
+            "interval": self._infer_interval(df),
+            "concentration": self._calculate_concentration(price_bins, chips)
+        }
 
-    ax1.axhline(last_price, color='red', linestyle='--', linewidth=1)
-    ax1.axhline(avg_price, color='green', linestyle='-.', linewidth=1, label='Avg Price')
+    def render_plot(self, data: dict[str, Any], filename: str = "") -> go.Figure:
+        if not data: return go.Figure()
+        code_match = re.search(r'[a-zA-Z]{2}\d{6}', filename)
+        stock_code = code_match.group(0).upper() if code_match else "Unknown"
+        main_title = f"{stock_code} ({data['interval']}) - Effective Start: {data['start_date']}"
 
-    info_text = (
-        f"Last Price: {last_price:.2f}\n"
-        f"Avg Cost: {avg_price:.2f}\n"
-        f"Profit Ratio: {profit_ratio:.1f}%\n"
-        f"Hold-up Ratio: {hold_up_ratio:.1f}%"
-    )
-    plt.text(1.02, 0.8, info_text, transform=ax1.transAxes, fontsize=10,
-             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+        fig = make_subplots(
+            rows=1, cols=2, shared_yaxes=True, 
+            column_widths=[0.7, 0.3], horizontal_spacing=0.01,
+            subplot_titles=(main_title, "Profit/Loss Distribution")
+        )
 
-    filename = os.path.basename(file_path)
-    plt.title(f"Advanced Chip Distribution (CYQ) - {filename}")
-    ax1.legend(loc='upper left')
-    
-    plt.tight_layout()
-    plt.show()
+        # Left: Price line (Cropped to effective range)
+        fig.add_trace(go.Scatter(x=data["effective_df"]['day'], y=data["effective_df"]['close'],
+                                 name='Price', line=dict(color='#2196F3', width=2)), row=1, col=1)
+
+        # Right: Chips (Full accumulation)
+        colors = ['#4CAF50' if p <= data['last_price'] else '#F44336' for p in data['price_bins']]
+        fig.add_trace(go.Bar(x=data["chips"], y=data["price_bins"], orientation='h',
+                             marker_color=colors, opacity=0.8, showlegend=False), row=1, col=2)
+
+        # Reference lines
+        # pyright: ignore [reportGeneralTypeIssues]
+        fig.add_hline(y=data['last_price'], line_dash="solid", line_color="black", row=1, col=1)
+        fig.add_hline(y=data["avg_price"], line_dash="dot", line_color="blue", 
+                      annotation_text=f"Avg:{data['avg_price']:.2f}", row=1, col=1)
+
+        info_html = (f"<b>Profit Ratio:</b> {data['profit_ratio']:.2f}%<br>"
+                     f"<b>90% Concentration:</b> {data['concentration']}")
+        
+        fig.add_annotation(xref="paper", yref="paper", x=0.98, y=1.1, text=info_html, 
+                           showarrow=False, align="right", bgcolor="rgba(255, 255, 255, 0.9)", borderwidth=1)
+
+        fig.update_yaxes(range=data["y_range"], row=1, col=1)
+        fig.update_layout(template="plotly_white", margin=dict(l=50, r=50, t=110, b=50), hovermode="y unified")
+        return fig
 
 if __name__ == "__main__":
-    excel_file = "./stock_data/sh603667_60m_with_turnover_20260306_190920.xlsx" 
-    plot_advanced_cyq(excel_file)
+    test_file = "./stock_data/sz002050_60m_with_turnover_20260309_172521.xlsx"
+    if os.path.exists(test_file):
+        df_in = pd.read_excel(test_file)
+        viz = ChipDistVisualizer(bin_count=300, decay_threshold=1e-3, smoothing=1.5) 
+        res = viz.generate_distribution(df_in)
+        if res: viz.render_plot(res, filename=os.path.basename(test_file)).show()
