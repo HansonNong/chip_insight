@@ -51,7 +51,7 @@ class ChipDistVisualizer:
         survival_weight = np.ones(len(df))
         
         # 2. FULL calculation: Process every row to accumulate chips correctly
-        for i, row in df.iterrows():
+        for idx_int, (i, row) in enumerate(df.iterrows()):
             t_rate = float(row['turnover_rate'])
             chips *= (1 - t_rate)
             idx = np.abs(price_bins - float(row['close'])).argmin()
@@ -59,8 +59,8 @@ class ChipDistVisualizer:
             
             # Record how much of THIS specific day's chip remains at the end
             # This helps us find the "Effective Start" date for the chart
-            if i < len(df) - 1:
-                survival_weight[:i+1] *= (1 - t_rate)
+            if idx_int < len(df) - 1:
+                survival_weight[:idx_int+1] *= (1 - t_rate)
 
         # 3. Find effective start based on decay_threshold
         # We look for the first index where the historical chips still have influence
@@ -125,7 +125,7 @@ class ChipDistVisualizer:
         return fig
 
 if __name__ == "__main__":
-    test_file = "./stock_data/sz002050_60m_with_turnover_20260309_172521.xlsx"
+    test_file = "./stock_data/sh603667_60m_with_turnover_20260310_144759.xlsx"
     if os.path.exists(test_file):
         df_in = pd.read_excel(test_file)
         viz = ChipDistVisualizer(bin_count=300, decay_threshold=1e-3, smoothing=1.5) 
