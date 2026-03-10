@@ -2,13 +2,22 @@ import akshare as ak
 import pandas as pd
 import os
 
-def download_stock_60m_with_turnover(symbol, float_shares, period=60, target_dir="./stock_data"):
+def download_stock_60m_with_turnover(symbol, period=60, target_dir="./stock_data"):
     os.makedirs(target_dir, exist_ok=True)
     
     code = symbol
     if symbol[:2] not in ["sz", "sh"]:
         code = f"sh{symbol}" if symbol.startswith("6") else f"sz{symbol}"
-    
+
+    try:
+        print(f"Fetching float shares for {code}...")
+        pure_symbol = "".join(filter(str.isdigit, symbol))
+        info_df = ak.stock_individual_info_em(symbol=pure_symbol)
+        float_shares = float(info_df[info_df['item'] == '流通股']['value'].values[0])
+    except Exception as e:
+        print(f"Error fetching float shares: {str(e)}")
+        return None
+
     try:
         print(f"Fetching {period}min data for {code}...")
         df = ak.stock_zh_a_minute(symbol=code, period=str(period), adjust="qfq")
@@ -35,9 +44,8 @@ def download_stock_60m_with_turnover(symbol, float_shares, period=60, target_dir
 
 if __name__ == "__main__":
     my_symbol = "603667" 
-    my_float_shares = 3.66 * 1e+8
-    
-    excel_path = download_stock_60m_with_turnover(my_symbol, my_float_shares, period=60)
+
+    excel_path = download_stock_60m_with_turnover(my_symbol, period=60)
     
     if excel_path:
         print(f"Data saved successfully: {excel_path}")
