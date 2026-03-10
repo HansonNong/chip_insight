@@ -106,7 +106,7 @@ class TradeImageParser:
 
 if __name__ == "__main__":
     # Test script for local execution
-    test_image_path = "./test.jpg"
+    test_image_path = "test_files/parse_record.jpg"
     parser = TradeImageParser()
     
     print(f"[*] Processing image: {test_image_path}")
