@@ -47,6 +47,9 @@ class ChipDistVisualizer:
         price_bins = np.linspace(all_min * 0.95, all_max * 1.05, self.bin_count)
         chips = np.zeros_like(price_bins)
         
+        freshness_chips = np.zeros_like(price_bins)
+        total_steps = len(df)
+
         # Track chip survival for visual cropping
         survival_weight = np.ones(len(df))
         
@@ -54,13 +57,20 @@ class ChipDistVisualizer:
         for idx_int, (i, row) in enumerate(df.iterrows()):
             t_rate = float(row['turnover_rate'])
             chips *= (1 - t_rate)
+            freshness_chips *= (1 - t_rate)
+
             idx = np.abs(price_bins - float(row['close'])).argmin()
             chips[idx] += t_rate
+            
+            current_weight = (idx_int + 1) / total_steps
+            freshness_chips[idx] += (t_rate * current_weight)
             
             # Record how much of THIS specific day's chip remains at the end
             # This helps us find the "Effective Start" date for the chart
             if idx_int < len(df) - 1:
                 survival_weight[:idx_int+1] *= (1 - t_rate)
+
+        avg_freshness = np.divide(freshness_chips, chips, out=np.zeros_like(chips), where=chips > 0)
 
         # 3. Find effective start based on decay_threshold
         # We look for the first index where the historical chips still have influence
@@ -71,6 +81,7 @@ class ChipDistVisualizer:
         # 4. Apply smoothing to make it look like professional software (THS)
         if self.smoothing > 0:
             chips = gaussian_filter1d(chips, sigma=self.smoothing)
+            avg_freshness = gaussian_filter1d(avg_freshness, sigma=self.smoothing)
 
         last_p = float(df['close'].iloc[-1])
         total_sum = np.sum(chips)
@@ -78,7 +89,7 @@ class ChipDistVisualizer:
         profit_r = (np.sum(chips[price_bins <= last_p]) / total_sum) * 100 if total_sum > 0 else 0
 
         return {
-            "price_bins": price_bins, "chips": chips, "last_price": last_p,
+            "price_bins": price_bins, "chips": chips, "freshness": avg_freshness, "last_price": last_p,
             "avg_price": avg_p, "profit_ratio": profit_r,
             "start_date": effective_df['day'].iloc[0], 
             "effective_df": effective_df,
@@ -104,9 +115,18 @@ class ChipDistVisualizer:
                                  name='Price', line=dict(color='#2196F3', width=2)), row=1, col=1)
 
         # Right: Chips (Full accumulation)
-        colors = ['#4CAF50' if p <= data['last_price'] else '#F44336' for p in data['price_bins']]
+        bar_colors = []
+        for p, f in zip(data['price_bins'], data['freshness']):
+            hue = 120 if p <= data['last_price'] else 0
+            sat = 25 + (f * 75)
+            light = 85 - (f * 40)
+            bar_colors.append(f"hsl({hue}, {sat}%, {light}%)")
+
         fig.add_trace(go.Bar(x=data["chips"], y=data["price_bins"], orientation='h',
-                             marker_color=colors, opacity=0.8, showlegend=False), row=1, col=2)
+                             marker=dict(color=bar_colors, line=dict(width=0)), 
+                             opacity=0.9, showlegend=False, customdata=data['freshness'],
+                             hovertemplate="Price: %{y:.2f}<br>Density: %{x:.4f}<br>Freshness: %{customdata:.2%}<extra></extra>"), 
+                      row=1, col=2)
 
         # Reference lines
         # pyright: ignore [reportGeneralTypeIssues]
@@ -115,19 +135,22 @@ class ChipDistVisualizer:
                       annotation_text=f"Avg:{data['avg_price']:.2f}", row=1, col=1)
 
         info_html = (f"<b>Profit Ratio:</b> {data['profit_ratio']:.2f}%<br>"
-                     f"<b>90% Concentration:</b> {data['concentration']}")
+                      f"<b>90% Concentration:</b> {data['concentration']}")
         
         fig.add_annotation(xref="paper", yref="paper", x=0.98, y=1.1, text=info_html, 
-                           showarrow=False, align="right", bgcolor="rgba(255, 255, 255, 0.9)", borderwidth=1)
+                            showarrow=False, align="right", bgcolor="rgba(255, 255, 255, 0.9)", borderwidth=1)
 
         fig.update_yaxes(range=data["y_range"], row=1, col=1)
         fig.update_layout(template="plotly_white", margin=dict(l=50, r=50, t=110, b=50), hovermode="y unified")
         return fig
 
 if __name__ == "__main__":
-    test_file = "./stock_data/sh603667_60m_with_turnover_20260310_144759.xlsx"
+    test_file = "./cache/sh603667_60m_with_turnover_20260310_144759.xlsx"
+
     if os.path.exists(test_file):
         df_in = pd.read_excel(test_file)
         viz = ChipDistVisualizer(bin_count=300, decay_threshold=1e-3, smoothing=1.5) 
         res = viz.generate_distribution(df_in)
         if res: viz.render_plot(res, filename=os.path.basename(test_file)).show()
+    else:
+        print(f"File {test_file} not exist! ")
