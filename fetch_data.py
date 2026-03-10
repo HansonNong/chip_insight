@@ -2,7 +2,7 @@ import akshare as ak
 import pandas as pd
 import os
 
-def download_stock_60m_with_turnover(symbol, period=60, target_dir="./stock_data"):
+def download_stock_60m_with_turnover(symbol, period=60, target_dir="./cache"):
     os.makedirs(target_dir, exist_ok=True)
     
     code = symbol
