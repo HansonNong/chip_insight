@@ -36,7 +36,7 @@ def download_stock_60m_with_turnover(symbol, period=60, target_dir="./stock_data
 
     df = df.drop_duplicates(keep="last").sort_index().reset_index(drop=True)
     
-    filename = f"{code}_{period}m_with_turnover_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    filename = f"{code}_{period}m_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     save_path = os.path.join(target_dir, filename)
     
     df.to_excel(save_path, index=False)
