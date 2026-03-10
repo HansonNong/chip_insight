@@ -8,10 +8,11 @@ import os
 import re
 
 class ChipDistVisualizer:
-    def __init__(self, bin_count: int = 250, decay_threshold: float = 0.00001, smoothing: float = 1.0):
+    def __init__(self, bin_count: int = 250, decay_threshold: float = 0.00001, smoothing: float = 1.0, contrast: float = 1.0):
         self.bin_count = bin_count
         self.decay_threshold = decay_threshold
         self.smoothing = smoothing
+        self.contrast = contrast
 
     def _calculate_concentration(self, bins: np.ndarray, chips: np.ndarray, ratio: float = 0.9) -> str:
         total = np.sum(chips)
@@ -117,9 +118,12 @@ class ChipDistVisualizer:
         # Right: Chips (Full accumulation)
         bar_colors = []
         for p, f in zip(data['price_bins'], data['freshness']):
-            hue = 120 if p <= data['last_price'] else 0
-            sat = 25 + (f * 75)
-            light = 85 - (f * 40)
+            hue = 0 if p <= data['last_price'] else 210
+            
+            f_adj = np.power(f, self.contrast)
+            
+            sat = 25 + (f_adj * 75)
+            light = 85 - (f_adj * 40)
             bar_colors.append(f"hsl({hue}, {sat}%, {light}%)")
 
         fig.add_trace(go.Bar(x=data["chips"], y=data["price_bins"], orientation='h',
@@ -149,8 +153,10 @@ if __name__ == "__main__":
 
     if os.path.exists(test_file):
         df_in = pd.read_excel(test_file)
-        viz = ChipDistVisualizer(bin_count=300, decay_threshold=1e-3, smoothing=1.5) 
+        viz = ChipDistVisualizer(bin_count=300, decay_threshold=1e-3, smoothing=1.5, contrast=3) 
         res = viz.generate_distribution(df_in)
+
         if res: viz.render_plot(res, filename=os.path.basename(test_file)).show()
+
     else:
         print(f"File {test_file} not exist! ")
