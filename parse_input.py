@@ -14,21 +14,31 @@ class TradeImageParser:
 
     def _get_rows(self, img_data: np.ndarray) -> list[list[str]]:
         result, _ = self.engine(img_data)
-        if not result: return []
+        if not result: 
+            return []
 
         items: list[dict[str, Any]] = []
         for line in result:
             coords = cast(list[list[float]], line[0])
             text = str(line[1]).strip()
+            
+            # Calculate center coordinates
             y_coords = [float(p[1]) for p in coords]
             x_coords = [float(p[0]) for p in coords]
-            items.append({'x': sum(x_coords)/4.0, 'y': sum(y_coords)/4.0, 'text': text})
+            items.append({
+                'x': sum(x_coords)/4.0, 
+                'y': sum(y_coords)/4.0, 
+                'text': text
+            })
 
-        if not items: return []
+        if not items: 
+            return []
+            
+        # Group text items into rows by Y coordinate
         items.sort(key=lambda x: x['y'])
-        
         rows: list[list[str]] = []
         current_row = [items[0]]
+        
         for i in range(1, len(items)):
             if abs(items[i]['y'] - current_row[-1]['y']) <= self.y_threshold:
                 current_row.append(items[i])
@@ -36,11 +46,13 @@ class TradeImageParser:
                 current_row.sort(key=lambda x: x['x'])
                 rows.append([it['text'] for it in current_row])
                 current_row = [items[i]]
+        
         current_row.sort(key=lambda x: x['x'])
         rows.append([it['text'] for it in current_row])
         return rows
 
     def parse(self, img_input: str | bytes) -> pd.DataFrame:
+        # Handle both file paths and raw bytes
         img_data: np.ndarray | None = None
         if isinstance(img_input, bytes):
             nparr = np.frombuffer(img_input, np.uint8)
@@ -48,7 +60,8 @@ class TradeImageParser:
         else:
             img_data = cv2.imread(str(img_input))
 
-        if img_data is None: return pd.DataFrame()
+        if img_data is None: 
+            return pd.DataFrame()
 
         rows = self._get_rows(img_data)
         records: list[dict[str, Any]] = []
@@ -58,45 +71,63 @@ class TradeImageParser:
             row_str = "".join(row)
             action_match = self.re_action.search(row_str)
 
+            # Detect new trade entry
             if action_match:
                 if 'name' in buffer and ('price' in buffer or 'volume' in buffer):
                     records.append(buffer.copy())
-                buffer = {'name': row[0], 'action': action_match.group(), 'price': 0.0, 'volume': 0, 'amount': 0.0, 'time': None}
+                
+                buffer = {
+                    'name': row[0], 
+                    'action': action_match.group(), 
+                    'price': 0.0, 
+                    'volume': 0, 
+                    'amount': 0.0, 
+                    'time': None
+                }
                 search_items = row[1:]
             else:
                 search_items = row
 
+            # Extract numeric values and timestamps
             if 'name' in buffer:
                 for item in search_items:
                     clean_num = re.sub(r'[^\d.]', '', item)
-                    if not clean_num: continue
+                    if not clean_num: 
+                        continue
+                        
                     if len(clean_num) >= 8 and self.re_date_time.fullmatch(clean_num):
                         buffer['time'] = clean_num
                     elif '.' in clean_num:
                         val = float(clean_num)
-                        if buffer.get('price') == 0.0: buffer['price'] = val
-                        else: buffer['amount'] = val
+                        if buffer.get('price') == 0.0: 
+                            buffer['price'] = val
+                        else: 
+                            buffer['amount'] = val
                     elif clean_num.isdigit():
                         val_int = int(clean_num)
-                        if buffer.get('volume') == 0: buffer['volume'] = val_int
+                        if buffer.get('volume') == 0: 
+                            buffer['volume'] = val_int
 
         if 'name' in buffer and ('price' in buffer or 'volume' in buffer):
             records.append(buffer)
 
+        # Post-process DataFrame
         df = pd.DataFrame(records)
         if not df.empty:
             if 'time' in df.columns:
                 df['time'] = pd.to_datetime(df['time'], errors='coerce').fillna(pd.Timestamp.now())
+                
             df['price'] = df['price'].fillna(0.0)
             df['volume'] = df['volume'].fillna(0).astype(int)
             df['amount'] = df['amount'].fillna(0.0)
-            # 自动补全金额计算
+            
+            # Calculate missing amounts
             mask = (df['amount'] == 0.0) & (df['price'] > 0) & (df['volume'] > 0)
             df.loc[mask, 'amount'] = df['price'] * df['volume']
+            
         return df
     
 if __name__ == "__main__":
-    # Test script for local execution
     test_image_path = "test_files/parse_record.jpg"
     parser = TradeImageParser()
     
@@ -106,12 +137,11 @@ if __name__ == "__main__":
         
         if not result_df.empty:
             print("[+] Successfully parsed records:")
-            # Display all columns for verification
             print("-" * 80)
             print(result_df.to_string(index=False))
             print("-" * 80)
         else:
-            print("[-] No records found. Check if the image path is correct or OCR failed.")
+            print("[-] No records found. Check image or OCR.")
             
     except Exception as e:
         print(f"[!] An error occurred during parsing: {e}")
