@@ -116,6 +116,15 @@ class ChipInSightUI:
                     rows=[],
                     row_key='id'
                 ).classes('w-full border-none shadow-none')
+
+                # Red for Buy, Blue for Sell
+                self.table.add_slot('body-cell-action', '''
+                    <q-td :props="props">
+                        <q-badge :color="props.value === '买入' ? 'red' : (props.value === '卖出' ? 'blue' : 'grey')">
+                            {{ props.value }}
+                        </q-badge>
+                    </q-td>
+                ''')
                 
                 if self.search_input:
                     self.table.bind_filter_from(self.search_input, 'value')
