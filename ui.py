@@ -21,9 +21,9 @@ class TradeImageParseUI:
     def _init_ui(self):
         ui.page_title("交易记录图片解析工具")
         with ui.card().style("width:90%;max-width:1200px;margin:20px auto;padding:20px;"):
-            ui.label("交易记录图片解析").style("font-size:24px;font-weight:bold;margin-bottom:20px;")
+            ui.label("上传交易记录截图").style("font-size:24px;font-weight:bold;margin-bottom:20px;")
             ui.upload(
-                label="点击/拖拽上传图片",
+                label="上传图片",
                 on_upload=self._parse_trade_image,
                 max_files=1,
                 auto_upload=True
@@ -33,6 +33,7 @@ class TradeImageParseUI:
 
     # 统一日志接口
     def log(self, message: str, level: str = "info"):
+        assert self.tip_label is not None
         self.tip_label.set_text(message)
         level_map = {
             "info": "[INFO]",
@@ -70,6 +71,7 @@ class TradeImageParseUI:
 
             self.log(f"✅ 解析成功：共 {len(df)} 条记录", "success")
 
+            assert self.result_table is not None
             with self.result_table:
                 # ==================== ✅ 修复表格参数 ====================
                 ui.table(
