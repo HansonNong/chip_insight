@@ -19,9 +19,14 @@ class ChipInSightUI:
         self.table: ui.table | None = None
         self.search_input: ui.input | None = None
         
+        self.chip_price_table: ui.table | None = None
+        self.chip_price_search: ui.input | None = None
+        self.chip_summary_table: ui.table | None = None
+        self.chip_summary_search: ui.input | None = None
+        
         self._init_ui()
-        # Initial data load
-        ui.timer(0.1, self.refresh_table, once=True)
+        # 延迟时间加长一点，确保表格完全渲染后再加载数据
+        ui.timer(0.3, self.refresh_all_data, once=True)
 
     def _setup_logging(self, log_file: str):
         """Configure logger with file rotation and console output"""
@@ -77,13 +82,13 @@ class ChipInSightUI:
                 ui.label('ChipInSight').classes('text-h5 font-bold text-white')
             
             with ui.row().classes('items-center gap-3'):
-                ui.button('刷新数据', icon='refresh', on_click=self.refresh_table).props('flat color=white')
+                ui.button('刷新数据', icon='refresh', on_click=self.refresh_all_data).props('flat color=white')
                 ui.button('备份并重置', icon='history', on_click=self._confirm_clear).props('flat color=red-300')
 
-        # Main content container
-        with ui.column().classes('w-full max-w-6xl mx-auto my-6 p-4'):
+        # Main content container - 关键：增加 min-height 确保容器高度
+        with ui.column().classes('w-full max-w-6xl mx-auto my-6 p-4 min-h-[80vh]'):
             
-            # Upload section
+            # Upload section - 完全保留初始版样式
             with ui.card().classes('w-full p-6 shadow-sm mb-6'):
                 ui.label("同步记录").classes("text-lg font-bold mb-2")
                 with ui.row().classes('w-full items-start gap-6'):
@@ -98,16 +103,66 @@ class ChipInSightUI:
                         ui.label("系统状态").classes("text-xs font-bold text-gray-400 uppercase")
                         self.tip_label = ui.label("就绪").classes("text-sm text-gray-600 mt-1")
 
-            # Data table section
+            # 1. 筹码价格板块 - 关键：修复表格样式和布局
+            with ui.card().classes('w-full p-6 shadow-sm mb-6'):
+                ui.label("筹码价格").classes("text-xl font-bold mb-4")
+                # 搜索框单独一行，避免布局挤压
+                self.chip_price_search = ui.input(placeholder='搜索股票...').props('outlined dense').classes('w-64 mb-4')
+
+                # 关键：给表格加固定高度，确保显示
+                self.chip_price_table = ui.table(
+                    columns=[
+                        {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                        {"name": "price", "label": "价格", "field": "price", "sortable": True},
+                        {"name": "buy_volume", "label": "买入", "field": "buy_volume", "sortable": True},
+                        {"name": "sell_volume", "label": "卖出", "field": "sell_volume", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="price_key"
+                ).classes('w-full h-[200px]')  # 固定高度，确保显示
+                
+                if self.chip_price_search:
+                    self.chip_price_table.bind_filter_from(self.chip_price_search, 'value')
+
+            # 2. 筹码统计板块 - 关键：修复表格样式和布局
+            with ui.card().classes('w-full p-6 shadow-sm mb-6'):
+                ui.label("筹码统计").classes("text-xl font-bold mb-4")
+                # 搜索框单独一行
+                self.chip_summary_search = ui.input(placeholder='搜索股票...').props('outlined dense').classes('w-64 mb-4')
+
+                # 关键：给表格加固定高度
+                self.chip_summary_table = ui.table(
+                    columns=[
+                        {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                        {"name": "total_buy", "label": "总买入", "field": "total_buy", "sortable": True},
+                        {"name": "total_sell", "label": "总卖出", "field": "total_sell", "sortable": True},
+                        {"name": "hold_volume", "label": "当前持仓", "field": "hold_volume", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="summary_key"
+                ).classes('w-full h-[200px]')  # 固定高度，确保显示
+
+                # 持仓颜色标记
+                self.chip_summary_table.add_slot('body-cell-hold_volume', '''
+                    <q-td :props="props">
+                        <q-badge :color="props.value > 0 ? 'green' : (props.value < 0 ? 'red' : 'grey')">
+                            {{ props.value }}
+                        </q-badge>
+                    </q-td>
+                ''')
+                
+                if self.chip_summary_search:
+                    self.chip_summary_table.bind_filter_from(self.chip_summary_search, 'value')
+
+            # 3. 交易记录板块 - 保留初始版样式，增加固定高度
             with ui.card().classes('w-full p-6 shadow-sm'):
-                with ui.row().classes('w-full items-center justify-between mb-4'):
-                    ui.label("流水明细").classes("text-xl font-bold")
-                    self.search_input = ui.input(placeholder='搜索股票...').props('outlined dense').classes('w-64')
+                ui.label("流水明细").classes("text-xl font-bold mb-4")
+                self.search_input = ui.input(placeholder='搜索股票...').props('outlined dense').classes('w-64 mb-4')
 
                 self.table = ui.table(
                     columns=[
-                        {"name": "time", "label": "时间", "field": "time", "sortable": True, "align": "left"},
-                        {"name": "name", "label": "股票", "field": "name", "sortable": True, "align": "left"},
+                        {"name": "time", "label": "时间", "field": "time", "sortable": True},
+                        {"name": "name", "label": "股票", "field": "name", "sortable": True},
                         {"name": "action", "label": "动作", "field": "action", "align": "center"},
                         {"name": "price", "label": "价格", "field": "price", "sortable": True},
                         {"name": "volume", "label": "数量", "field": "volume", "sortable": True},
@@ -115,7 +170,7 @@ class ChipInSightUI:
                     ],
                     rows=[],
                     row_key='id'
-                ).classes('w-full border-none shadow-none')
+                ).classes('w-full h-[300px]')  # 增加固定高度
 
                 # Red for Buy, Blue for Sell
                 self.table.add_slot('body-cell-action', '''
@@ -129,20 +184,65 @@ class ChipInSightUI:
                 if self.search_input:
                     self.table.bind_filter_from(self.search_input, 'value')
 
+    # 刷新所有数据
+    async def refresh_all_data(self):
+        await self.refresh_chip_price()
+        await self.refresh_chip_summary()
+        await self.refresh_table()
+
+    # 筹码价格刷新 - 增加日志调试
+    async def refresh_chip_price(self):
+        try:
+            keyword = self.chip_price_search.value.strip() if self.chip_price_search else ""
+            df = self.db.get_chip_price(keyword)
+            self.log(f"筹码价格查询结果：{len(df)} 条数据", "info")
+            
+            if not df.empty:
+                df = df.astype({"buy_volume": int, "sell_volume": int})
+                df["price_key"] = df["name"] + "_" + df["price"].astype(str)
+            
+            if self.chip_price_table:
+                self.chip_price_table.rows = df.to_dict("records")
+
+        except Exception as e:
+            self.log(f"筹码价格加载失败: {str(e)}", "error")
+            self.logger.exception("Chip price refresh failed:")
+
+    # 筹码统计刷新 - 增加日志调试
+    async def refresh_chip_summary(self):
+        try:
+            keyword = self.chip_summary_search.value.strip() if self.chip_summary_search else ""
+            df = self.db.get_chip_summary(keyword)
+            self.log(f"筹码统计查询结果：{len(df)} 条数据", "info")
+            
+            if not df.empty:
+                df = df.astype({"total_buy": int, "total_sell": int, "hold_volume": int})
+                df["summary_key"] = df["name"]
+            
+            if self.chip_summary_table:
+                self.chip_summary_table.rows = df.to_dict("records")
+
+        except Exception as e:
+            self.log(f"筹码统计加载失败: {str(e)}", "error")
+            self.logger.exception("Chip summary refresh failed:")
+
+    # 交易记录刷新
     async def refresh_table(self):
         try:
             df = self.db.get_all_trades()
+            self.log(f"交易记录查询结果：{len(df)} 条数据", "info")
+            
             if not df.empty and 'time' in df.columns:
                 df['time'] = df['time'].astype(str).str.replace('T', ' ')
             
             if self.table:
                 self.table.rows = df.to_dict('records')
-                self.log(f"已加载 {len(df)} 条记录", "info")
 
-        except Exception:
-            self.log("加载失败", "error")
+        except Exception as e:
+            self.log(f"交易记录加载失败: {str(e)}", "error")
             self.logger.exception("Data refresh failed:")
 
+    # 解析上传的图片
     async def _parse_trade_image(self, e: events.UploadEventArguments):
         fname = getattr(e, 'name', '未知文件')
         self.log(f"处理中: {fname}", "info")
@@ -158,17 +258,18 @@ class ChipInSightUI:
             added = self.db.save_trades(df)
             if added > 0:
                 self.log(f"完成: {fname} (+{added})", "success")
-                await self.refresh_table()
+                await self.refresh_all_data()
             else:
                 self.log(f"跳过重复: {fname}", "info")
             
             if isinstance(e.sender, ui.upload):
                 e.sender.reset()
 
-        except Exception:
-            self.log("解析崩溃", "error")
+        except Exception as e:
+            self.log(f"解析崩溃: {str(e)}", "error")
             self.logger.exception(f"OCR processing crashed for {fname}:")
 
+    # 确认重置数据库
     async def _confirm_clear(self):
         with ui.dialog() as dialog, ui.card().classes('p-6'):
             ui.label('备份并重置数据库？').classes('text-lg font-bold text-red-600')
@@ -178,16 +279,18 @@ class ChipInSightUI:
                 ui.button('确定', on_click=lambda: self._handle_clear(dialog)).props('color=red')
         dialog.open()
 
+    # 处理重置数据库
     async def _handle_clear(self, dialog):
         if self.db.clear_all_trades():
             ui.notify('旧数据已备份，新数据库已就绪', type='positive')
             self.log("数据库已备份并重置", "success")
-            await self.refresh_table()
+            await self.refresh_all_data()
         else:
             ui.notify('重置失败', type='negative')
             self.log("重置失败", "error")
         dialog.close()
 
+    # 启动程序
     def run(self):
         self.logger.info("Application starting...")
         ui.run(title="ChipInSight", port=self.port, host=self.host, reload=False)

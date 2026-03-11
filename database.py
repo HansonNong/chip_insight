@@ -6,8 +6,7 @@ import gc
 from datetime import datetime
 
 class TradeDatabase:
-    def __init__(self, db_path="data/chip_insight.db"):
-        # Ensure directory exists
+    def __init__(self, db_path: str = "data/chip_insight.db"):
         self.db_dir = os.path.dirname(db_path)
         if self.db_dir:
             os.makedirs(self.db_dir, exist_ok=True)
@@ -15,7 +14,7 @@ class TradeDatabase:
         self.db_path = db_path
         self._init_db()
 
-    def _init_db(self):
+    def _init_db(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS trades (
@@ -41,7 +40,6 @@ class TradeDatabase:
             cursor = conn.cursor()
             for _, row in df.iterrows():
                 try:
-                    # Format time if it is a datetime object
                     trade_time = row['time']
                     if hasattr(trade_time, 'strftime'):
                         trade_time = trade_time.strftime('%Y-%m-%d %H:%M:%S')
@@ -74,22 +72,15 @@ class TradeDatabase:
 
     def clear_all_trades(self) -> bool:
         try:
-            # Generate backup path
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = f"{self.db_path}.{timestamp}.bak"
             
             if os.path.exists(self.db_path):
-                # Use self.db_path directly (self.db does not exist)
                 shutil.copy2(self.db_path, backup_path)
                 print(f"[DATABASE INFO] 已备份至: {backup_path}")
-                
-                # Release handles for Windows compatibility
                 gc.collect() 
-
-                # Delete original file
                 os.remove(self.db_path)
             
-            # Re-initialize empty database
             self._init_db()
             print("[DATABASE INFO] 已重置新数据库。")
             return True
@@ -97,3 +88,51 @@ class TradeDatabase:
         except Exception as e:
             print(f"[DATABASE ERROR] 备份并重置失败: {e}")
             return False
+
+    # ========== 关键：添加缺失的 get_chip_price 方法 ==========
+    def get_chip_price(self, stock_name: str | None = None) -> pd.DataFrame:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                query = '''
+                    SELECT 
+                        name,
+                        price,
+                        SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) as buy_volume,
+                        SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) as sell_volume
+                    FROM trades 
+                '''
+                params = []
+                if stock_name and stock_name.strip():
+                    query += " WHERE name LIKE ?"
+                    params.append(f"%{stock_name.strip()}%")
+                
+                query += " GROUP BY name, price ORDER BY name, price"
+                df = pd.read_sql_query(query, conn, params=params)
+                return df
+        except Exception as e:
+            print(f"[ERROR] 筹码价格查询失败: {e}")
+            return pd.DataFrame()
+
+    # ========== 关键：添加缺失的 get_chip_summary 方法 ==========
+    def get_chip_summary(self, stock_name: str | None = None) -> pd.DataFrame:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                query = '''
+                    SELECT 
+                        name,
+                        SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) as total_buy,
+                        SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) as total_sell,
+                        SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) - SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) as hold_volume
+                    FROM trades 
+                '''
+                params = []
+                if stock_name and stock_name.strip():
+                    query += " WHERE name LIKE ?"
+                    params.append(f"%{stock_name.strip()}%")
+                
+                query += " GROUP BY name ORDER BY name"
+                df = pd.read_sql_query(query, conn, params=params)
+                return df
+        except Exception as e:
+            print(f"[ERROR] 筹码统计查询失败: {e}")
+            return pd.DataFrame()
