@@ -1,25 +1,71 @@
-from nicegui import ui, events
+import logging
+from logging.handlers import RotatingFileHandler
 import pandas as pd
-import traceback
-from typing import Optional
+from nicegui import ui, events
 
 from database import TradeDatabase
 from parse_input import TradeImageParser
 
 class ChipInSightUI:
-    def __init__(self, port=8080, host="0.0.0.0"):
+    def __init__(self, port: int = 8080, host: str = "0.0.0.0", log_file: str = "chipinsight.log"):
+        self._setup_logging(log_file)
+        
         self.parser = TradeImageParser()
         self.db = TradeDatabase()
         self.port = port
         self.host = host
 
-        self.tip_label: Optional[ui.label] = None
-        self.table: Optional[ui.table] = None
-        self.search_input: Optional[ui.input] = None
+        self.tip_label: ui.label | None = None
+        self.table: ui.table | None = None
+        self.search_input: ui.input | None = None
         
         self._init_ui()
         # Initial data load
         ui.timer(0.1, self.refresh_table, once=True)
+
+    def _setup_logging(self, log_file: str):
+        """Configure logger with file rotation and console output"""
+        self.logger = logging.getLogger("ChipInSight")
+        self.logger.setLevel(logging.INFO)
+        
+        if not self.logger.handlers:
+            formatter = logging.Formatter(
+                '%(asctime)s [%(levelname)s] %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+
+            # File handler: 5MB limit, keep 3 backups
+            fh = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+            fh.setFormatter(formatter)
+            self.logger.addHandler(fh)
+
+            # Console handler
+            ch = logging.StreamHandler()
+            ch.setFormatter(formatter)
+            self.logger.addHandler(ch)
+
+    def log(self, message: str, level: str = "info"):
+        """Sync UI label, console, and log file"""
+        color_map = {
+            "info": "text-blue-500", 
+            "success": "text-green-600", 
+            "warn": "text-amber-600", 
+            "error": "text-red-600"
+        }
+        
+        if self.tip_label:
+            self.tip_label.set_text(message)
+            self.tip_label.classes(replace=f"text-sm {color_map.get(level, 'text-black')}")
+        
+        log_mapping = {
+            "info": self.logger.info,
+            "success": self.logger.info,
+            "warn": self.logger.warning,
+            "error": self.logger.error
+        }
+        log_func = log_mapping.get(level, self.logger.info)
+        prefix = "[SUCCESS] " if level == "success" else ""
+        log_func(f"{prefix}{message}")
 
     def _init_ui(self):
         ui.page_title("ChipInSight - 股票交易记录管理")
@@ -71,42 +117,28 @@ class ChipInSightUI:
                     row_key='id'
                 ).classes('w-full border-none shadow-none')
                 
-                # Link search input to table filtering
-                self.table.bind_filter_from(self.search_input, 'value')
-
-    def log(self, message: str, level: str = "info"):
-        color_map = {
-            "info": "text-blue-500", 
-            "success": "text-green-600", 
-            "warn": "text-amber-600", 
-            "error": "text-red-600"
-        }
-        if self.tip_label:
-            self.tip_label.set_text(message)
-            self.tip_label.classes(replace=f"text-sm {color_map.get(level, 'text-black')}")
-        print(f"[{level.upper()}] {message}")
+                if self.search_input:
+                    self.table.bind_filter_from(self.search_input, 'value')
 
     async def refresh_table(self):
         try:
             df = self.db.get_all_trades()
             if not df.empty and 'time' in df.columns:
-                # Format ISO timestamps for display
                 df['time'] = df['time'].astype(str).str.replace('T', ' ')
             
-            assert self.table is not None
-            self.table.rows = df.to_dict('records')
-            self.log(f"已加载 {len(df)} 条记录", "info")
+            if self.table:
+                self.table.rows = df.to_dict('records')
+                self.log(f"已加载 {len(df)} 条记录", "info")
 
         except Exception:
             self.log("加载失败", "error")
-            traceback.print_exc()
+            self.logger.exception("Data refresh failed:")
 
     async def _parse_trade_image(self, e: events.UploadEventArguments):
         fname = getattr(e, 'name', '未知文件')
         self.log(f"处理中: {fname}", "info")
         
         try:
-            # Read image bytes and parse via OCR
             img_bytes = await e.file.read()
             df = self.parser.parse(img_bytes)
             
@@ -114,7 +146,6 @@ class ChipInSightUI:
                 self.log(f"无法识别: {fname}", "warn")
                 return
 
-            # Save to database and update UI
             added = self.db.save_trades(df)
             if added > 0:
                 self.log(f"完成: {fname} (+{added})", "success")
@@ -127,10 +158,9 @@ class ChipInSightUI:
 
         except Exception:
             self.log("解析崩溃", "error")
-            traceback.print_exc()
+            self.logger.exception(f"OCR processing crashed for {fname}:")
 
     async def _confirm_clear(self):
-        # Reset confirmation dialog
         with ui.dialog() as dialog, ui.card().classes('p-6'):
             ui.label('备份并重置数据库？').classes('text-lg font-bold text-red-600')
             ui.label('当前数据将存为 .bak 文件，系统将起用全新的数据库。')
@@ -142,12 +172,15 @@ class ChipInSightUI:
     async def _handle_clear(self, dialog):
         if self.db.clear_all_trades():
             ui.notify('旧数据已备份，新数据库已就绪', type='positive')
+            self.log("数据库已备份并重置", "success")
             await self.refresh_table()
         else:
             ui.notify('重置失败', type='negative')
+            self.log("重置失败", "error")
         dialog.close()
 
     def run(self):
+        self.logger.info("Application starting...")
         ui.run(title="ChipInSight", port=self.port, host=self.host, reload=False)
 
 if __name__ in {"__main__", "__mp_main__"}:
