@@ -2,9 +2,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 import pandas as pd
 from nicegui import ui, events
+
 from database import TradeDatabase
 from parse_input import TradeImageParser
-
 
 class ChipInSightUI:
     def __init__(self, port: int = 8080, host: str = "0.0.0.0", log_file: str = "chipinsight.log"):
@@ -14,7 +14,7 @@ class ChipInSightUI:
         self.db = TradeDatabase()
         self.port = port
         self.host = host
-        
+
         self.tip_label: ui.label | None = None
         self.table: ui.table | None = None
         self.search_input: ui.input | None = None
@@ -25,37 +25,35 @@ class ChipInSightUI:
         self.chip_summary_search: ui.input | None = None
         
         self._init_ui()
-        # Delay to ensure tables render before loading data
-        ui.timer(0.3, self.refresh_all_data, once=True)
-
+        ui.timer(0.5, self.refresh_all_data, once=True)
 
     def _setup_logging(self, log_file: str):
-        # Set up rotating file and console logging
+        # Set up logger with file rotation
         self.logger = logging.getLogger("ChipInSight")
         self.logger.setLevel(logging.INFO)
         
-        if not self.logger.handlers:
-            formatter = logging.Formatter(
-                '%(asctime)s [%(levelname)s] %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            )
-            # 5MB per file, keep 3 backups
-            fh = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
-            fh.setFormatter(formatter)
-            self.logger.addHandler(fh)
-            
-            # Console output
-            ch = logging.StreamHandler()
-            ch.setFormatter(formatter)
-            self.logger.addHandler(ch)
+        if self.logger.handlers:
+            return
 
+        formatter = logging.Formatter(
+            '%(asctime)s [%(levelname)s] %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+
+        fh = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+        fh.setFormatter(formatter)
+        self.logger.addHandler(fh)
+
+        ch = logging.StreamHandler()
+        ch.setFormatter(formatter)
+        self.logger.addHandler(ch)
 
     def log(self, message: str, level: str = "info"):
-        # Sync UI label, console and log file
+        # Update UI label and log output
         color_map = {
-            "info": "text-blue-500", 
-            "success": "text-green-600", 
-            "warn": "text-amber-600", 
+            "info": "text-blue-500",
+            "success": "text-green-600",
+            "warn": "text-amber-600",
             "error": "text-red-600"
         }
         
@@ -73,11 +71,9 @@ class ChipInSightUI:
         prefix = "[SUCCESS] " if level == "success" else ""
         log_func(f"{prefix}{message}")
 
-
     def _init_ui(self):
         ui.page_title("ChipInSight - 股票交易记录管理")
         
-        # Header layout
         with ui.header().classes('items-center justify-between bg-slate-800 p-4'):
             with ui.row().classes('items-center'):
                 ui.icon('auto_graph', size='lg').classes('text-white')
@@ -86,14 +82,10 @@ class ChipInSightUI:
             with ui.row().classes('items-center gap-3'):
                 ui.button('刷新数据', icon='refresh', on_click=self.refresh_all_data).props('flat color=white')
                 ui.button('备份并重置', icon='history', on_click=self._confirm_clear).props('flat color=red-300')
-        
-        # Main container with min height
+
         with ui.column().classes('w-full max-w-6xl mx-auto my-6 p-4 min-h-[80vh]'):
-            
-            # Upload section
             with ui.card().classes('w-full p-6 shadow-sm mb-6'):
                 ui.label("同步记录").classes("text-lg font-bold mb-2")
-                
                 with ui.row().classes('w-full items-start gap-6'):
                     self.uploader = ui.upload(
                         label="上传股票交易截图 (支持批量)",
@@ -106,30 +98,37 @@ class ChipInSightUI:
                         ui.label("系统状态").classes("text-xs font-bold text-gray-400 uppercase")
                         self.tip_label = ui.label("就绪").classes("text-sm text-gray-600 mt-1")
 
-            # Chip price table
+            # Chip price section
             with ui.card().classes('w-full p-6 shadow-sm mb-6'):
                 ui.label("筹码价格").classes("text-xl font-bold mb-4")
                 self.chip_price_search = ui.input(placeholder='搜索股票...').props('outlined dense').classes('w-64 mb-4')
-                
+                self.chip_price_search.on('input', self.refresh_chip_price)
+
                 self.chip_price_table = ui.table(
                     columns=[
                         {"name": "name", "label": "股票", "field": "name", "sortable": True},
                         {"name": "price", "label": "价格", "field": "price", "sortable": True},
-                        {"name": "buy_volume", "label": "买入", "field": "buy_volume", "sortable": True},
-                        {"name": "sell_volume", "label": "卖出", "field": "sell_volume", "sortable": True},
+                        {"name": "net_volume", "label": "数量", "field": "net_volume", "sortable": True},
                     ],
                     rows=[],
                     row_key="price_key"
-                ).classes('w-full h-[200px]')
-                
-                if self.chip_price_search:
-                    self.chip_price_table.bind_filter_from(self.chip_price_search, 'value')
+                ).classes('w-full h-[260px]')
 
-            # Chip summary table
+                # Volume color: positive red, negative blue
+                self.chip_price_table.add_slot('body-cell-net_volume', '''
+                    <q-td :props="props">
+                        <q-badge :color="props.value > 0 ? 'red' : (props.value < 0 ? 'blue' : 'grey')">
+                            {{ props.value }}
+                        </q-badge>
+                    </q-td>
+                ''')
+
+            # Chip summary section
             with ui.card().classes('w-full p-6 shadow-sm mb-6'):
                 ui.label("筹码统计").classes("text-xl font-bold mb-4")
                 self.chip_summary_search = ui.input(placeholder='搜索股票...').props('outlined dense').classes('w-64 mb-4')
-                
+                self.chip_summary_search.on('input', self.refresh_chip_summary)
+
                 self.chip_summary_table = ui.table(
                     columns=[
                         {"name": "name", "label": "股票", "field": "name", "sortable": True},
@@ -139,9 +138,8 @@ class ChipInSightUI:
                     ],
                     rows=[],
                     row_key="summary_key"
-                ).classes('w-full h-[200px]')
-                
-                # Position color badge
+                ).classes('w-full h-[260px]')
+
                 self.chip_summary_table.add_slot('body-cell-hold_volume', '''
                     <q-td :props="props">
                         <q-badge :color="props.value > 0 ? 'green' : (props.value < 0 ? 'red' : 'grey')">
@@ -149,15 +147,13 @@ class ChipInSightUI:
                         </q-badge>
                     </q-td>
                 ''')
-                
-                if self.chip_summary_search:
-                    self.chip_summary_table.bind_filter_from(self.chip_summary_search, 'value')
 
-            # Trade history table
+            # Trade history section
             with ui.card().classes('w-full p-6 shadow-sm'):
                 ui.label("流水明细").classes("text-xl font-bold mb-4")
                 self.search_input = ui.input(placeholder='搜索股票...').props('outlined dense').classes('w-64 mb-4')
-                
+                self.search_input.on('input', self.refresh_table)
+
                 self.table = ui.table(
                     columns=[
                         {"name": "time", "label": "时间", "field": "time", "sortable": True},
@@ -169,9 +165,9 @@ class ChipInSightUI:
                     ],
                     rows=[],
                     row_key='id'
-                ).classes('w-full h-[300px]')
-                
-                # Action color badge
+                ).classes('w-full h-[360px]')
+
+                # Action color: Buy red, Sell blue
                 self.table.add_slot('body-cell-action', '''
                     <q-td :props="props">
                         <q-badge :color="props.value === '买入' ? 'red' : (props.value === '卖出' ? 'blue' : 'grey')">
@@ -179,72 +175,73 @@ class ChipInSightUI:
                         </q-badge>
                     </q-td>
                 ''')
-                
-                if self.search_input:
-                    self.table.bind_filter_from(self.search_input, 'value')
-
 
     async def refresh_all_data(self):
-        # Refresh all tables
         await self.refresh_chip_price()
         await self.refresh_chip_summary()
         await self.refresh_table()
 
-
     async def refresh_chip_price(self):
-        # Load chip price data
         try:
-            keyword = self.chip_price_search.value.strip() if self.chip_price_search else ""
+            keyword = self.chip_price_search.value.strip() if (self.chip_price_search and self.chip_price_search.value) else ""
             df = self.db.get_chip_price(keyword)
             self.log(f"筹码价格查询结果：{len(df)} 条数据", "info")
             
+            rows = []
             if not df.empty:
                 df = df.astype({"buy_volume": int, "sell_volume": int})
+                df["net_volume"] = df["buy_volume"] - df["sell_volume"]
                 df["price_key"] = df["name"] + "_" + df["price"].astype(str)
+                rows = df.to_dict("records")
             
             if self.chip_price_table:
-                self.chip_price_table.rows = df.to_dict("records")
+                self.chip_price_table.rows = rows
+
         except Exception as e:
             self.log(f"筹码价格加载失败: {str(e)}", "error")
-            self.logger.exception("Chip price refresh failed:")
-
+            self.logger.exception("Chip price refresh failed")
 
     async def refresh_chip_summary(self):
-        # Load chip summary data
         try:
-            keyword = self.chip_summary_search.value.strip() if self.chip_summary_search else ""
+            keyword = self.chip_summary_search.value.strip() if (self.chip_summary_search and self.chip_summary_search.value) else ""
             df = self.db.get_chip_summary(keyword)
             self.log(f"筹码统计查询结果：{len(df)} 条数据", "info")
             
+            rows = []
             if not df.empty:
                 df = df.astype({"total_buy": int, "total_sell": int, "hold_volume": int})
                 df["summary_key"] = df["name"]
+                rows = df.to_dict("records")
             
             if self.chip_summary_table:
-                self.chip_summary_table.rows = df.to_dict("records")
+                self.chip_summary_table.rows = rows
+
         except Exception as e:
             self.log(f"筹码统计加载失败: {str(e)}", "error")
-            self.logger.exception("Chip summary refresh failed:")
-
+            self.logger.exception("Chip summary refresh failed")
 
     async def refresh_table(self):
-        # Load trade records
         try:
+            keyword = self.search_input.value.strip() if (self.search_input and self.search_input.value) else ""
             df = self.db.get_all_trades()
             self.log(f"交易记录查询结果：{len(df)} 条数据", "info")
             
-            if not df.empty and 'time' in df.columns:
-                df['time'] = df['time'].astype(str).str.replace('T', ' ')
+            rows = []
+            if not df.empty:
+                if 'time' in df.columns:
+                    df['time'] = df['time'].astype(str).str.replace('T', ' ')
+                if keyword:
+                    df = df[df['name'].str.contains(keyword, na=False)]
+                rows = df.to_dict('records')
             
             if self.table:
-                self.table.rows = df.to_dict('records')
+                self.table.rows = rows
+
         except Exception as e:
             self.log(f"交易记录加载失败: {str(e)}", "error")
-            self.logger.exception("Data refresh failed:")
-
+            self.logger.exception("Trade table refresh failed")
 
     async def _parse_trade_image(self, evt: events.UploadEventArguments):
-        # Parse uploaded trade image
         fname = getattr(evt, 'name', '未知文件')
         self.log(f"处理中: {fname}", "info")
         
@@ -255,7 +252,7 @@ class ChipInSightUI:
             if df.empty:
                 self.log(f"无法识别: {fname}", "warn")
                 return
-            
+
             added = self.db.save_trades(df)
             if added > 0:
                 self.log(f"完成: {fname} (+{added})", "success")
@@ -265,26 +262,21 @@ class ChipInSightUI:
             
             if isinstance(evt.sender, ui.upload):
                 evt.sender.reset()
+
         except Exception as e:
             self.log(f"解析崩溃: {str(e)}", "error")
-            self.logger.exception(f"OCR processing crashed for {fname}:")
-
+            self.logger.exception(f"OCR processing crashed: {fname}")
 
     async def _confirm_clear(self):
-        # Show confirm dialog for DB reset
         with ui.dialog() as dialog, ui.card().classes('p-6'):
             ui.label('备份并重置数据库？').classes('text-lg font-bold text-red-600')
             ui.label('当前数据将存为 .bak 文件，系统将起用全新的数据库。')
-            
             with ui.row().classes('w-full justify-end gap-2 mt-4'):
                 ui.button('取消', on_click=dialog.close).props('outline')
                 ui.button('确定', on_click=lambda: self._handle_clear(dialog)).props('color=red')
-        
         dialog.open()
 
-
     async def _handle_clear(self, dialog):
-        # Backup and reset database
         if self.db.clear_all_trades():
             ui.notify('旧数据已备份，新数据库已就绪', type='positive')
             self.log("数据库已备份并重置", "success")
@@ -292,15 +284,11 @@ class ChipInSightUI:
         else:
             ui.notify('重置失败', type='negative')
             self.log("重置失败", "error")
-            
         dialog.close()
 
-
     def run(self):
-        # Start application
-        self.logger.info("Application starting...")
+        self.logger.info("Application starting")
         ui.run(title="ChipInSight", port=self.port, host=self.host, reload=False)
-
 
 if __name__ in {"__main__", "__mp_main__"}:
     ChipInSightUI().run()
