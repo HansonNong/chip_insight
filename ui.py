@@ -16,7 +16,6 @@ class ChipInSightUI:
         self.port = port
         self.host = host
 
-        # 所有 UI 组件先声明，避免 None
         self.tip_label: ui.label | None = None
         self.table: ui.table | None = None
         self.search_input: ui.input | None = None
@@ -32,7 +31,6 @@ class ChipInSightUI:
         self.available_buy_table: ui.table | None = None
         self.uploader: ui.upload | None = None
 
-        # 先初始化弹窗，再初始化主界面
         self._init_match_dialog()
         self._init_ui()
         
@@ -99,7 +97,6 @@ class ChipInSightUI:
                         ui.label("系统状态").classes("text-xs font-bold text-gray-400 uppercase")
                         self.tip_label = ui.label("就绪").classes("text-sm text-gray-600 mt-1")
 
-            # 卖出筹码匹配板块
             with ui.card().classes('w-full p-6 shadow-sm mb-6'):
                 ui.label("卖出筹码匹配").classes("text-xl font-bold mb-4")
                 with ui.row().classes('w-full gap-4'):
@@ -116,7 +113,6 @@ class ChipInSightUI:
                                 {"name": "profit_pct", "label": "盈利率", "field": "profit_pct", "sortable": True},
                                 {"name": "annual", "label": "年化", "field": "annual", "sortable": True},
                                 {"name": "status", "label": "状态", "field": "status", "align": "center"},
-                                {"name": "act", "label": "操作", "field": "act", "align": "center"},
                             ],
                             rows=[],
                             row_key="sell_id"
@@ -124,42 +120,36 @@ class ChipInSightUI:
                         
                         self.sell_match_table.add_slot('body-cell-profit', '''
                             <q-td :props="props">
-                                <q-badge :color="props.value >= 0 ? 'red' : 'green'">
+                                <div v-if="props.row.status === '未匹配'" class="text-gray-600">
+                                    {{ props.value.toFixed(2) }}
+                                </div>
+                                <q-badge v-else :color="props.value >= 0 ? 'red' : 'blue'">
                                     {{ props.value.toFixed(2) }}
                                 </q-badge>
                             </q-td>
                         ''')
                         self.sell_match_table.add_slot('body-cell-profit_pct', '''
                             <q-td :props="props">
-                                <q-badge :color="props.value >= 0 ? 'red' : 'green'">
+                                <div v-if="props.row.status === '未匹配'" class="text-gray-600">
+                                    {{ (props.value*100).toFixed(2) }}%
+                                </div>
+                                <q-badge v-else :color="props.value >= 0 ? 'red' : 'blue'">
                                     {{ (props.value*100).toFixed(2) }}%
                                 </q-badge>
                             </q-td>
                         ''')
                         self.sell_match_table.add_slot('body-cell-annual', '''
                             <q-td :props="props">
-                                <q-badge :color="props.value >= 0 ? 'red' : 'green'">
+                                <div v-if="props.row.status === '未匹配'" class="text-gray-600">
+                                    {{ (props.value*100).toFixed(2) }}%
+                                </div>
+                                <q-badge v-else :color="props.value >= 0 ? 'red' : 'blue'">
                                     {{ (props.value*100).toFixed(2) }}%
                                 </q-badge>
                             </q-td>
                         ''')
-                        self.sell_match_table.add_slot('body-cell-status', '''
-                            <q-td :props="props">
-                                <q-badge :color="props.value === '已匹配' ? 'green' : 'orange'">
-                                    {{ props.value }}
-                                </q-badge>
-                            </q-td>
-                        ''')
-                        self.sell_match_table.add_slot('body-cell-act', '''
-                            <q-td :props="props">
-                                <q-button size="sm" color="primary" @click="$emit('row-click', props.row)">
-                                    匹配
-                                </q-button>
-                            </q-td>
-                        ''')
                         self.sell_match_table.on('rowClick', self._open_match_dialog)
 
-            # 筹码价格板块
             with ui.card().classes('w-full p-6 shadow-sm mb-6'):
                 ui.label("筹码价格").classes("text-xl font-bold mb-4")
                 with ui.row().classes('w-full gap-4'):
@@ -306,14 +296,19 @@ class ChipInSightUI:
 
     def _calc_annual(self, buy_time_str, sell_time_str, profit_pct):
         try:
-            bt = pd.to_datetime(buy_time_str)
-            st = pd.to_datetime(sell_time_str)
-            days = (st - bt).total_seconds() / 86400
+            bt = pd.to_datetime(buy_time_str).date()
+            st = pd.to_datetime(sell_time_str).date()
+            # 精确自然日
+            days = (st - bt).days
+            # 当天买卖按 1 天算
             if days <= 0:
-                return 0.0
+                days = 1
+            profit_pct = float(profit_pct)
+            # 年化公式（负收益正常算）
             annual = (1 + profit_pct) ** (365 / days) - 1
             return round(annual, 4)
-        except:
+        except Exception as e:
+            print(f"年化错误：{e}")
             return 0.0
 
     async def refresh_sell_match_table(self):
@@ -327,7 +322,10 @@ class ChipInSightUI:
                 for _, r in df.iterrows():
                     profit = round(r.get("profit", 0), 2)
                     profit_pct = round(r.get("profit_pct", 0), 4)
-                    annual = self._calc_annual(r.get("buy_time", r["time"]), r["time"], profit_pct)
+
+                    buy_time = r.get("buy_time") or r.get("buy_date") or r["time"]
+                    annual = self._calc_annual(buy_time, r["time"], profit_pct)
+
                     rows.append({
                         "sell_id": str(r["id"]),
                         "time": r["time"],
