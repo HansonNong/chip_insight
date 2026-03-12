@@ -5,3 +5,4 @@ class Config:
     LOG_FILE = "chipinsight.log"
     LOG_MAX_BYTES = 5 * 1024 * 1024
     LOG_BACKUP_COUNT = 3
+    RELOAD = False

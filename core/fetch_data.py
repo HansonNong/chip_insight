@@ -1,53 +1,55 @@
 import akshare as ak
 import pandas as pd
-import os
+import re
 
-def download_stock_60m_with_turnover(symbol, period=60, target_dir="./cache"):
-    os.makedirs(target_dir, exist_ok=True)
+def get_stock_data(symbol: str, period: int = 60) -> tuple[pd.DataFrame | None, str]:
+    pure_symbol = re.sub(r"[^0-9]", "", symbol)
+    if not pure_symbol:
+        return None, ""
     
-    code = symbol
-    if symbol[:2] not in ["sz", "sh"]:
-        code = f"sh{symbol}" if symbol.startswith("6") else f"sz{symbol}"
+    if symbol.startswith(("sh", "sz")):
+        code = symbol
+    else:
+        code = f"sh{pure_symbol}" if pure_symbol.startswith("6") else f"sz{pure_symbol}"
 
     try:
-        print(f"Fetching float shares for {code}...")
-        pure_symbol = "".join(filter(str.isdigit, symbol))
         info_df = ak.stock_individual_info_em(symbol=pure_symbol)
         float_shares = float(info_df[info_df['item'] == '流通股']['value'].values[0])
     except Exception as e:
-        print(f"Error fetching float shares: {str(e)}")
-        return None
+        print(f"获取流通股失败: {e}")
+        return None, code
 
     try:
-        print(f"Fetching {period}min data for {code}...")
         df = ak.stock_zh_a_minute(symbol=code, period=str(period), adjust="qfq")
     except Exception as e:
-        print(f"Error fetching data: {str(e)}")
-        return None
+        print(f"获取K线数据失败: {e}")
+        return None, code
 
     if df is None or df.empty:
-        print("No valid data fetched for the symbol")
-        return None
+        return None, code
 
+    df = df.rename(columns={"datetime": "day"})  # 适配visualize_cost的字段名
     df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
     df['close'] = pd.to_numeric(df['close'], errors='coerce')
-    
-    df['turnover_rate'] = df['volume'] / float_shares
-
+    df['turnover_rate'] = df['volume'] / float_shares  # 换手率=成交量/流通股
     df = df.drop_duplicates(keep="last").sort_index().reset_index(drop=True)
     
-    filename = f"{code}_{period}m_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    save_path = os.path.join(target_dir, filename)
-    
-    df.to_excel(save_path, index=False)
-    return save_path
+    return df, code
+
 
 if __name__ == "__main__":
     my_symbol = "603667" 
+    target_dir="./cache"
+    period=60
+    import os
 
-    excel_path = download_stock_60m_with_turnover(my_symbol, period=60)
-    
-    if excel_path:
-        print(f"Data saved successfully: {excel_path}")
+    df, code = get_stock_data(my_symbol, period=period)
+
+    filename = f"{code}_{period}m_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    save_path = os.path.join(target_dir, filename)
+
+    if df is not None:
+        df.to_excel(save_path, index=False)
+        print(f"Data saved successfully: {save_path}")
     else:
-        print("Data download failed.")
+        print("No data to save.")

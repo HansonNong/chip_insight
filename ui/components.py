@@ -1,5 +1,6 @@
 from nicegui import ui
 from typing import Callable
+import plotly.graph_objects as go
 
 # ==============================
 # HeaderUI
@@ -112,6 +113,7 @@ class SellMatchUI:
             with self.match_stock_list:
                 ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
 
+
 # ==============================
 # ChipPriceUI
 # ==============================
@@ -119,16 +121,18 @@ class ChipPriceUI:
     def __init__(self, on_stock_click: Callable):
         self.chip_stock_list: ui.list | None = None
         self.chip_price_table: ui.table | None = None
+        self.chip_dist_plot: ui.plotly | None = None  # 新增：筹码分布图
         self.on_stock_click = on_stock_click
         self._build()
+    
     def _build(self):
         with ui.card().classes("w-full p-6 shadow-sm mb-6"):
-            ui.label("筹码价格").classes("text-xl font-bold mb-4")
+            ui.label("筹码价格 + 分布").classes("text-xl font-bold mb-4")  # 修改标题
             with ui.row().classes("w-full gap-4"):
-                with ui.column().classes("w-56 h-[260px] overflow-y-auto border rounded p-2"):
+                with ui.column().classes("w-56"):
                     ui.label("持仓股票").classes("text-sm font-semibold mb-2")
-                    self.chip_stock_list = ui.list().classes("w-full")
-                with ui.column().classes("flex-1"):
+                    self.chip_stock_list = ui.list().classes("w-full h-[260px] overflow-y-auto border rounded p-2 mb-4")
+                    
                     self.chip_price_table = ui.table(
                         columns=[
                             {"name": "name", "label": "股票", "field": "name", "sortable": True},
@@ -137,7 +141,7 @@ class ChipPriceUI:
                         ],
                         rows=[],
                         row_key="price_key"
-                    ).classes("w-full h-[260px]")
+                    ).classes("w-full h-[200px]")
                     self.chip_price_table.add_slot("body-cell-net_volume", '''
                         <q-td :props="props">
                             <q-badge :color="props.value > 0 ? 'red' : (props.value < 0 ? 'blue' : 'grey')">
@@ -145,12 +149,24 @@ class ChipPriceUI:
                             </q-badge>
                         </q-td>
                     ''')
+                
+                with ui.column().classes("flex-1"):
+                    ui.label("筹码分布对比").classes("text-sm font-semibold mb-2")
+                    self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("w-full h-[480px]")  # 新增图表
+    
     def set_rows(self, rows):
         if self.chip_price_table:
             self.chip_price_table.rows = rows
+    
+    def set_chip_plot(self, figure: go.Figure): 
+        if self.chip_dist_plot:
+            self.chip_dist_plot.figure = figure
+            self.chip_dist_plot.update()
+    
     def clear_stock_list(self):
         if self.chip_stock_list:
             self.chip_stock_list.clear()
+    
     def add_stock_item(self, name, callback):
         if self.chip_stock_list:
             with self.chip_stock_list:

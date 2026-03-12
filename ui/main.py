@@ -8,6 +8,9 @@ from .components import (
 )
 from db.database import TradeDatabase
 from core.parse_input import TradeImageParser
+from core.fetch_data import get_stock_data
+from core.visualize_cost import ChipDistVisualizer
+import plotly.graph_objects as go
 
 
 class ChipInSightApp:
@@ -18,6 +21,9 @@ class ChipInSightApp:
         self.service = TradeService(self.db, self.parser)
         self.current_selected_stock: str = ""
         self.current_matching_sell_id: str = ""
+        self.chip_visualizer = ChipDistVisualizer(  
+            bin_count=300, decay_threshold=1e-3, smoothing=1.5, contrast=3
+        )
 
         self.header: HeaderUI | None = None
         self.upload_card: UploadCardUI | None = None
@@ -144,6 +150,65 @@ class ChipInSightApp:
     async def _on_stock_click(self, stock_name: str):
         self.current_selected_stock = stock_name
         await self.refresh_chip_price()
+        await self.refresh_chip_dist_plot() 
+
+    async def get_own_chips(self, stock_name: str) -> list[tuple[float, int]]:
+        df = self.service.get_chip_price(stock_name)
+        if df.empty:
+            return []
+        
+        df = df.astype({"buy_volume": int, "sell_volume": int})
+        df["net_volume"] = df["buy_volume"] - df["sell_volume"]
+        df = df[df["net_volume"] > 0]
+
+        return list(zip(df["price"].round(2), df["net_volume"]))
+    
+    async def refresh_chip_dist_plot(self) -> None:
+        if not self.current_selected_stock or not self.chip_price_ui:
+            return
+
+        # 1. Get stock code
+        summary_df = self.service.get_chip_summary(self.current_selected_stock)
+        if summary_df.empty:
+            self.chip_price_ui.set_chip_plot(go.Figure())
+            self.logger.warn(f"{self.current_selected_stock} 无代码信息，无法获取行情")
+            return
+        
+        stock_code = summary_df.iloc[0].get("code", "")
+        if not stock_code:
+            self.chip_price_ui.set_chip_plot(go.Figure())
+            self.logger.warn(f"{self.current_selected_stock} 未配置股票代码，请先在筹码统计中填写")
+            return
+
+        # 2. Get stock data
+        self.logger.info(f"正在获取 {self.current_selected_stock}({stock_code}) 行情数据...")
+        kline_df, std_code = get_stock_data(stock_code)
+        if kline_df is None or kline_df.empty:
+            self.chip_price_ui.set_chip_plot(go.Figure())
+            self.logger.warn(f"{self.current_selected_stock} 行情数据获取失败")
+            return
+
+        # 3. Generate chip distribution data
+        dist_data = self.chip_visualizer.generate_distribution(kline_df)
+        if not dist_data:
+            self.chip_price_ui.set_chip_plot(go.Figure())
+            return
+
+        # 4. Get own chips for annotation on the plot
+        own_chips = await self.get_own_chips(self.current_selected_stock)
+
+        # 5. Render plot with distribution data and own chips
+        fig = self.chip_visualizer.render_plot(
+            data=dist_data,
+            stock_code=std_code,
+            own_chips=own_chips
+        )
+
+        # 6. Update the UI with the new plot
+        self.chip_price_ui.set_chip_plot(fig)
+        if self.chip_price_ui.chip_dist_plot:
+            self.chip_price_ui.chip_dist_plot.update()
+        self.logger.success(f"{self.current_selected_stock} 筹码分布图生成完成")
 
     async def refresh_chip_price(self):
         if not self.current_selected_stock or not self.chip_price_ui:
@@ -259,4 +324,4 @@ class ChipInSightApp:
         await self.refresh_table()
 
     def run(self):
-        ui.run(title=Config.APP_TITLE, host=Config.HOST, port=Config.PORT, reload=True)
+        ui.run(title=Config.APP_TITLE, host=Config.HOST, port=Config.PORT, reload=Config.RELOAD)
