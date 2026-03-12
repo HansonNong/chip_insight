@@ -1,4 +1,7 @@
 from nicegui import ui, events
+import plotly.graph_objects as go
+import asyncio 
+
 from .config import Config
 from .logger import AppLogger
 from .service import TradeService
@@ -10,7 +13,6 @@ from db.database import TradeDatabase
 from core.parse_input import TradeImageParser
 from core.fetch_data import get_stock_data
 from core.visualize_cost import ChipDistVisualizer
-import plotly.graph_objects as go
 
 
 class ChipInSightApp:
@@ -108,6 +110,7 @@ class ChipInSightApp:
     async def _load_available_buys(self):
         if not self.buy_dialog:
             return
+        
         df = self.service.get_available_buys(self.current_selected_stock)
         rows = []
         if not df.empty:
@@ -126,6 +129,7 @@ class ChipInSightApp:
         buy_row = e.args[1]
         buy_id = buy_row["buy_id"]
         self.service.remove_match(self.current_matching_sell_id)
+        
         ok = self.service.create_match(self.current_matching_sell_id, buy_id)
         if ok:
             self.logger.success("重新匹配成功！")
@@ -172,20 +176,26 @@ class ChipInSightApp:
         if summary_df.empty:
             self.chip_price_ui.set_chip_plot(go.Figure())
             self.logger.warn(f"{self.current_selected_stock} 无代码信息，无法获取行情")
+            ui.notify(f"{self.current_selected_stock} 无代码信息，无法获取行情")
             return
         
         stock_code = summary_df.iloc[0].get("code", "")
         if not stock_code:
             self.chip_price_ui.set_chip_plot(go.Figure())
             self.logger.warn(f"{self.current_selected_stock} 未配置股票代码，请先在筹码统计中填写")
+            ui.notify(f"{self.current_selected_stock} 未配置股票代码，请先在筹码统计中填写")
             return
 
         # 2. Get stock data
         self.logger.info(f"正在获取 {self.current_selected_stock}({stock_code}) 行情数据...")
+        ui.notify(f"正在获取 {self.current_selected_stock} 行情数据...")
+        await asyncio.sleep(0.01)
+
         kline_df, std_code = get_stock_data(stock_code)
         if kline_df is None or kline_df.empty:
             self.chip_price_ui.set_chip_plot(go.Figure())
             self.logger.warn(f"{self.current_selected_stock} 行情数据获取失败")
+            ui.notify(f"{self.current_selected_stock} 行情数据获取失败")
             return
 
         # 3. Generate chip distribution data
@@ -209,6 +219,7 @@ class ChipInSightApp:
         if self.chip_price_ui.chip_dist_plot:
             self.chip_price_ui.chip_dist_plot.update()
         self.logger.success(f"{self.current_selected_stock} 筹码分布图生成完成")
+        ui.notify(f"{self.current_selected_stock} 筹码分布图生成完成")
 
     async def refresh_chip_price(self):
         if not self.current_selected_stock or not self.chip_price_ui:
@@ -267,9 +278,10 @@ class ChipInSightApp:
 
         dialog.open()
 
-    async def refresh_table(self):
+    async def refresh_table(self) -> None:
         if not self.trade_table_ui:
             return
+        
         keyword = self.trade_table_ui.get_search_keyword()
         df = self.service.get_all_trades()
         if keyword:
@@ -278,6 +290,7 @@ class ChipInSightApp:
             df["time"] = df["time"].astype(str).str.replace("T", " ")
         if "code" not in df.columns:
             df["code"] = ""
+
         rows = df.to_dict("records") if not df.empty else []
         self.trade_table_ui.set_rows(rows)
 
