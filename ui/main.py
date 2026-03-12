@@ -19,7 +19,6 @@ class ChipInSightApp:
         self.current_selected_stock: str = ""
         self.current_matching_sell_id: str = ""
 
-        # 全部用 类型 | None 标注，不使用 Optional
         self.header: HeaderUI | None = None
         self.upload_card: UploadCardUI | None = None
         self.sell_match_ui: SellMatchUI | None = None
@@ -45,8 +44,9 @@ class ChipInSightApp:
                 on_row_click=self._open_match_dialog
             )
             self.chip_price_ui = ChipPriceUI(on_stock_click=self._on_stock_click)
-            self.summary_ui = SummaryUI(on_search=self.refresh_chip_summary)
+            self.summary_ui = SummaryUI(on_search=self.refresh_chip_summary, on_code_edit=self._edit_stock_code)
             self.trade_table_ui = TradeTableUI(on_search=self.refresh_table)
+
         self.buy_dialog = BuyMatchDialogUI(on_match=self._do_match)
 
     async def refresh_match_stock_list(self):
@@ -167,8 +167,36 @@ class ChipInSightApp:
         if not df.empty:
             df = df.astype({"total_buy": int, "total_sell": int, "hold_volume": int})
             df["summary_key"] = df["name"]
+            if "code" not in df.columns:
+                df["code"] = ""
             rows = df.to_dict("records")
         self.summary_ui.set_rows(rows)
+
+    async def _edit_stock_code(self, row):
+        stock_name = row["name"]
+        current_code = row.get("code", "")
+
+        with ui.dialog() as dialog, ui.card().classes("p-6 w-[400px]"):
+            ui.label(f"编辑股票代码：{stock_name}").classes("text-lg font-bold mb-4")
+            code_input = ui.input(
+                label="股票代码",
+                value=current_code,
+                placeholder="例如：000001"
+            ).props("outlined dense").classes("w-full mb-4")
+
+            async def _save():
+                new_code = code_input.value.strip()
+                if new_code:
+                    self.service.update_stock_code(stock_name, new_code)
+                    ui.notify(f"✅ {stock_name} 代码已保存：{new_code}")
+                    await self.refresh_chip_summary()
+                dialog.close()
+
+            with ui.row().classes("justify-end gap-3 mt-4"):
+                ui.button("取消", on_click=dialog.close).props("flat")
+                ui.button("保存", on_click=_save, color="blue-5")
+
+        dialog.open()
 
     async def refresh_table(self):
         if not self.trade_table_ui:
@@ -179,6 +207,8 @@ class ChipInSightApp:
             df = df[df["name"].str.contains(keyword, na=False)]
         if "time" in df.columns:
             df["time"] = df["time"].astype(str).str.replace("T", " ")
+        if "code" not in df.columns:
+            df["code"] = ""
         rows = df.to_dict("records") if not df.empty else []
         self.trade_table_ui.set_rows(rows)
 

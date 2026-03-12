@@ -160,11 +160,13 @@ class ChipPriceUI:
 # SummaryUI
 # ==============================
 class SummaryUI:
-    def __init__(self, on_search: Callable):
+    def __init__(self, on_search: Callable, on_code_edit: Callable):
         self.chip_summary_search: ui.input | None = None
         self.chip_summary_table: ui.table | None = None
         self.on_search = on_search
+        self.on_code_edit = on_code_edit
         self._build()
+
     def _build(self):
         with ui.card().classes("w-full p-6 shadow-sm mb-6"):
             ui.label("筹码统计").classes("text-xl font-bold mb-4")
@@ -172,6 +174,7 @@ class SummaryUI:
             self.chip_summary_search.on("input", self.on_search)
             self.chip_summary_table = ui.table(
                 columns=[
+                    {"name": "code", "label": "股票代码", "field": "code", "sortable": True},
                     {"name": "name", "label": "股票", "field": "name", "sortable": True},
                     {"name": "total_buy", "label": "总买入", "field": "total_buy", "sortable": True},
                     {"name": "total_sell", "label": "总卖出", "field": "total_sell", "sortable": True},
@@ -180,6 +183,16 @@ class SummaryUI:
                 rows=[],
                 row_key="summary_key"
             ).classes("w-full h-[260px]")
+
+            self.chip_summary_table.add_slot("body-cell-code", '''
+                <q-td :props="props">
+                    <div class="cursor-pointer text-blue-600 hover:underline px-1"
+                        @click="$emit('rowClick', props)">
+                        {{ props.value || '点击填写' }}
+                    </div>
+                </q-td>
+            ''')
+
             self.chip_summary_table.add_slot("body-cell-hold_volume", '''
                 <q-td :props="props">
                     <q-badge :color="props.value > 0 ? 'red' : (props.value < 0 ? 'blue' : 'grey')">
@@ -187,8 +200,16 @@ class SummaryUI:
                     </q-badge>
                 </q-td>
             ''')
+
+            self.chip_summary_table.on('rowClick', self._handle_click)
+
+    async def _handle_click(self, e):
+        row = e.args[1]
+        await self.on_code_edit(row)
+
     def get_search_keyword(self):
         return self.chip_summary_search.value.strip() if (self.chip_summary_search and self.chip_summary_search.value) else ""
+
     def set_rows(self, rows):
         if self.chip_summary_table:
             self.chip_summary_table.rows = rows

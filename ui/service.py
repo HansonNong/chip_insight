@@ -49,3 +49,6 @@ class TradeService:
 
     def get_all_trades(self):
         return self.db.get_all_trades()
+    
+    def update_stock_code(self, stock_name: str, code: str):
+        return self.db.update_stock_code(stock_name, code)

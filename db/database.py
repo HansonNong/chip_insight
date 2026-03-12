@@ -21,6 +21,7 @@ class TradeDatabase:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     time TEXT,
                     name TEXT,
+                    code TEXT DEFAULT '',
                     action TEXT,
                     price REAL,
                     volume INTEGER,
@@ -57,11 +58,12 @@ class TradeDatabase:
                         trade_time = trade_time.strftime('%Y-%m-%d %H:%M:%S')
                     cursor.execute('''
                         INSERT OR IGNORE INTO trades 
-                        (time, name, action, price, volume, amount)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        (time, name, code, action, price, volume, amount)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         str(trade_time),
                         str(row.get('name', '未知')),
+                        str(row.get('code', '')),  # 股票代码
                         str(row.get('action', '未知')),
                         float(row.get('price', 0.0)),
                         int(row.get('volume', 0)),
@@ -125,25 +127,35 @@ class TradeDatabase:
     def get_chip_summary(self, stock_name: str | None = None) -> pd.DataFrame:
         try:
             with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA table_info(trades)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if "code" not in columns:
+                    cursor.execute("ALTER TABLE trades ADD COLUMN code TEXT DEFAULT ''")
+                    conn.commit()
+
                 query = '''
                     SELECT 
                         name,
+                        COALESCE(MAX(code), '') as code,
                         SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) AS total_buy,
                         SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) AS total_sell,
                         (SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) 
                         - SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END)) AS hold_volume
-                    FROM trades 
+                    FROM trades
                 '''
                 params = []
                 if stock_name and stock_name.strip():
                     query += " WHERE name LIKE ?"
                     params.append(f"%{stock_name.strip()}%")
                 query += " GROUP BY name ORDER BY name"
+
                 df = pd.read_sql_query(query, conn, params=params)
                 return df
+            
         except Exception as e:
             print(f"[ERROR] 筹码统计查询失败: {e}")
-            return pd.DataFrame()
+            return pd.DataFrame(columns=["name", "code", "total_buy", "total_sell", "hold_volume"])
 
     # ====================== 【新增】解绑方法：remove_sell_buy_match ======================
     def remove_sell_buy_match(self, sell_id):
@@ -271,4 +283,19 @@ class TradeDatabase:
                 return True
         except Exception as e:
             print(f"[ERROR] 匹配失败: {e}")
+            return False
+        
+    def update_stock_code(self, stock_name: str, code: str) -> bool:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE trades 
+                    SET code = ? 
+                    WHERE name = ?
+                ''', (code.strip(), stock_name))
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            print(f"[ERROR] 更新股票代码失败: {e}")
             return False
