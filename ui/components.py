@@ -186,8 +186,12 @@ class SummaryUI:
     def _build(self):
         with ui.card().classes("w-full p-6 shadow-sm mb-6"):
             ui.label("筹码统计").classes("text-xl font-bold mb-4")
-            self.chip_summary_search = ui.input(placeholder="搜索股票...").props("outlined dense").classes("w-64 mb-4")
-            self.chip_summary_search.on("input", self.on_search)
+
+            self.chip_summary_search = ui.input(
+                placeholder="搜索股票...", 
+                on_change=self.on_search
+            ).props("outlined dense").classes("w-64 mb-4")
+                        
             self.chip_summary_table = ui.table(
                 columns=[
                     {"name": "code", "label": "股票代码", "field": "code", "sortable": True},
@@ -242,8 +246,12 @@ class TradeTableUI:
     def _build(self):
         with ui.card().classes("w-full p-6 shadow-sm"):
             ui.label("流水明细").classes("text-xl font-bold mb-4")
-            self.search_input = ui.input(placeholder="搜索股票...").props("outlined dense").classes("w-64 mb-4")
-            self.search_input.on("input", self.on_search)
+            
+            self.search_input = ui.input(
+                placeholder="搜索股票...", 
+                on_change=self.on_search
+            ).props("outlined dense").classes("w-64 mb-4")
+
             self.table = ui.table(
                 columns=[
                     {"name": "time", "label": "时间", "field": "time", "sortable": True},
