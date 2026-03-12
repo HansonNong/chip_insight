@@ -19,10 +19,9 @@ class HeaderUI:
 # ==============================
 class UploadCardUI:
     def __init__(self, on_upload: Callable):
-        self.uploader = None
-        self.tip_label = None
+        self.uploader: ui.upload | None = None
+        self.tip_label: ui.label | None = None
         self._build(on_upload)
-
     def _build(self, on_upload):
         with ui.card().classes("w-full p-6 shadow-sm mb-6"):
             ui.label("同步记录").classes("text-lg font-bold mb-2")
@@ -36,21 +35,20 @@ class UploadCardUI:
                 with ui.column().classes("w-64 p-4 bg-gray-50 rounded"):
                     ui.label("系统状态").classes("text-xs font-bold text-gray-400 uppercase")
                     self.tip_label = ui.label("就绪").classes("text-sm text-gray-600 mt-1")
-
     def reset(self):
-        self.uploader.reset()
+        if self.uploader:
+            self.uploader.reset()
 
 # ==============================
 # SellMatchUI
 # ==============================
 class SellMatchUI:
     def __init__(self, on_stock_switch: Callable, on_row_click: Callable):
-        self.match_stock_list = None
-        self.sell_match_table = None
+        self.match_stock_list: ui.list | None = None
+        self.sell_match_table: ui.table | None = None
         self.on_stock_switch = on_stock_switch
         self.on_row_click = on_row_click
         self._build()
-
     def _build(self):
         with ui.card().classes("w-full p-6 shadow-sm mb-6"):
             ui.label("卖出筹码匹配").classes("text-xl font-bold mb-4")
@@ -72,7 +70,6 @@ class SellMatchUI:
                         rows=[],
                         row_key="sell_id"
                     ).classes("w-full h-[320px]")
-
                     self.sell_match_table.add_slot("body-cell-profit", '''
                         <q-td :props="props">
                             <div v-if="props.row.status === '未匹配'" class="text-gray-600">
@@ -104,27 +101,26 @@ class SellMatchUI:
                         </q-td>
                     ''')
                     self.sell_match_table.on("rowClick", self.on_row_click)
-
     def set_rows(self, rows):
-        self.sell_match_table.rows = rows
-
+        if self.sell_match_table:
+            self.sell_match_table.rows = rows
     def clear_stock_list(self):
-        self.match_stock_list.clear()
-
+        if self.match_stock_list:
+            self.match_stock_list.clear()
     def add_stock_item(self, name, callback):
-        with self.match_stock_list:
-            ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
+        if self.match_stock_list:
+            with self.match_stock_list:
+                ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
 
 # ==============================
 # ChipPriceUI
 # ==============================
 class ChipPriceUI:
     def __init__(self, on_stock_click: Callable):
-        self.chip_stock_list = None
-        self.chip_price_table = None
+        self.chip_stock_list: ui.list | None = None
+        self.chip_price_table: ui.table | None = None
         self.on_stock_click = on_stock_click
         self._build()
-
     def _build(self):
         with ui.card().classes("w-full p-6 shadow-sm mb-6"):
             ui.label("筹码价格").classes("text-xl font-bold mb-4")
@@ -149,27 +145,26 @@ class ChipPriceUI:
                             </q-badge>
                         </q-td>
                     ''')
-
     def set_rows(self, rows):
-        self.chip_price_table.rows = rows
-
+        if self.chip_price_table:
+            self.chip_price_table.rows = rows
     def clear_stock_list(self):
-        self.chip_stock_list.clear()
-
+        if self.chip_stock_list:
+            self.chip_stock_list.clear()
     def add_stock_item(self, name, callback):
-        with self.chip_stock_list:
-            ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
+        if self.chip_stock_list:
+            with self.chip_stock_list:
+                ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
 
 # ==============================
 # SummaryUI
 # ==============================
 class SummaryUI:
     def __init__(self, on_search: Callable):
-        self.chip_summary_search = None
-        self.chip_summary_table = None
+        self.chip_summary_search: ui.input | None = None
+        self.chip_summary_table: ui.table | None = None
         self.on_search = on_search
         self._build()
-
     def _build(self):
         with ui.card().classes("w-full p-6 shadow-sm mb-6"):
             ui.label("筹码统计").classes("text-xl font-bold mb-4")
@@ -192,23 +187,21 @@ class SummaryUI:
                     </q-badge>
                 </q-td>
             ''')
-
     def get_search_keyword(self):
-        return self.chip_summary_search.value.strip() if self.chip_summary_search.value else ""
-
+        return self.chip_summary_search.value.strip() if (self.chip_summary_search and self.chip_summary_search.value) else ""
     def set_rows(self, rows):
-        self.chip_summary_table.rows = rows
+        if self.chip_summary_table:
+            self.chip_summary_table.rows = rows
 
 # ==============================
 # TradeTableUI
 # ==============================
 class TradeTableUI:
     def __init__(self, on_search: Callable):
-        self.search_input = None
-        self.table = None
+        self.search_input: ui.input | None = None
+        self.table: ui.table | None = None
         self.on_search = on_search
         self._build()
-
     def _build(self):
         with ui.card().classes("w-full p-6 shadow-sm"):
             ui.label("流水明细").classes("text-xl font-bold mb-4")
@@ -233,23 +226,21 @@ class TradeTableUI:
                     </q-badge>
                 </q-td>
             ''')
-
     def get_search_keyword(self):
-        return self.search_input.value.strip() if self.search_input.value else ""
-
+        return self.search_input.value.strip() if (self.search_input and self.search_input.value) else ""
     def set_rows(self, rows):
-        self.table.rows = rows
+        if self.table:
+            self.table.rows = rows
 
 # ==============================
 # BuyMatchDialogUI
 # ==============================
 class BuyMatchDialogUI:
     def __init__(self, on_match: Callable):
-        self.dialog = None
-        self.available_buy_table = None
+        self.dialog: ui.dialog | None = None
+        self.available_buy_table: ui.table | None = None
         self.on_match = on_match
         self._build()
-
     def _build(self):
         self.dialog = ui.dialog()
         with self.dialog, ui.card().classes("w-[700px] p-4"):
@@ -272,13 +263,13 @@ class BuyMatchDialogUI:
                 </q-td>
             ''')
             self.available_buy_table.on("rowClick", self.on_match)
-            ui.button("关闭", on_click=lambda: self.dialog.close()).classes("mt-3").props("outline")
-
+            ui.button("关闭", on_click=lambda: self.dialog.close() if self.dialog else None).classes("mt-3").props("outline")
     def set_rows(self, rows):
-        self.available_buy_table.rows = rows
-
+        if self.available_buy_table:
+            self.available_buy_table.rows = rows
     def open(self):
-        self.dialog.open()
-
+        if self.dialog:
+            self.dialog.open()
     def close(self):
-        self.dialog.close()
+        if self.dialog:
+            self.dialog.close()
