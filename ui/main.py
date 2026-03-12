@@ -1,5 +1,4 @@
 from nicegui import ui, events
-
 from .config import Config
 from .logger import AppLogger
 from .service import TradeService
@@ -10,23 +9,24 @@ from .components import (
 from db.database import TradeDatabase
 from core.parse_input import TradeImageParser
 
+
 class ChipInSightApp:
     def __init__(self):
         self.logger = AppLogger()
         self.db = TradeDatabase()
         self.parser = TradeImageParser()
         self.service = TradeService(self.db, self.parser)
+        self.current_selected_stock: str = ""
+        self.current_matching_sell_id: str = ""
 
-        self.current_selected_stock = ""
-        self.current_matching_sell_id = ""
-
-        self.header = None
-        self.upload_card = None
-        self.sell_match_ui = None
-        self.chip_price_ui = None
-        self.summary_ui = None
-        self.trade_table_ui = None
-        self.buy_dialog = None
+        # 全部用 类型 | None 标注，不使用 Optional
+        self.header: HeaderUI | None = None
+        self.upload_card: UploadCardUI | None = None
+        self.sell_match_ui: SellMatchUI | None = None
+        self.chip_price_ui: ChipPriceUI | None = None
+        self.summary_ui: SummaryUI | None = None
+        self.trade_table_ui: TradeTableUI | None = None
+        self.buy_dialog: BuyMatchDialogUI | None = None
 
         self._build_ui()
         ui.timer(0.5, self.refresh_all_data, once=True)
@@ -36,7 +36,9 @@ class ChipInSightApp:
         self.header = HeaderUI(on_refresh=self.refresh_all_data, on_clear=self._confirm_clear)
         with ui.column().classes("w-full max-w-6xl mx-auto my-6 p-4 min-h-[80vh]"):
             self.upload_card = UploadCardUI(on_upload=self._parse_trade_image)
-            self.logger.set_tip_label(self.upload_card.tip_label)
+
+            if self.upload_card and self.upload_card.tip_label:
+                self.logger.set_tip_label(self.upload_card.tip_label)
 
             self.sell_match_ui = SellMatchUI(
                 on_stock_switch=self._on_stock_switch,
@@ -45,27 +47,30 @@ class ChipInSightApp:
             self.chip_price_ui = ChipPriceUI(on_stock_click=self._on_stock_click)
             self.summary_ui = SummaryUI(on_search=self.refresh_chip_summary)
             self.trade_table_ui = TradeTableUI(on_search=self.refresh_table)
-
         self.buy_dialog = BuyMatchDialogUI(on_match=self._do_match)
 
     async def refresh_match_stock_list(self):
         df = self.service.get_chip_summary("")
         df = df[df["hold_volume"] != 0].drop_duplicates("name")
         names = sorted(df["name"].tolist()) if not df.empty else []
-        self.sell_match_ui.clear_stock_list()
-        for name in names:
-            self.sell_match_ui.add_stock_item(name, lambda _, n=name: self._on_stock_switch(n))
+
+        if self.sell_match_ui:
+            self.sell_match_ui.clear_stock_list()
+            for name in names:
+                self.sell_match_ui.add_stock_item(name, lambda _, n=name: self._on_stock_switch(n))
+
         if names and not self.current_selected_stock:
             await self._on_stock_switch(names[0])
 
-    async def _on_stock_switch(self, stock_name):
+    async def _on_stock_switch(self, stock_name: str):
         self.current_selected_stock = stock_name
         await self.refresh_sell_match_table()
         await self.refresh_chip_price()
 
     async def refresh_sell_match_table(self):
-        if not self.current_selected_stock:
+        if not self.current_selected_stock or not self.sell_match_ui:
             return
+
         df = self.service.get_sell_records_with_match(self.current_selected_stock)
         rows = []
         if not df.empty:
@@ -91,9 +96,12 @@ class ChipInSightApp:
         row = e.args[1]
         self.current_matching_sell_id = str(row["sell_id"])
         await self._load_available_buys()
-        self.buy_dialog.open()
+        if self.buy_dialog:
+            self.buy_dialog.open()
 
     async def _load_available_buys(self):
+        if not self.buy_dialog:
+            return
         df = self.service.get_available_buys(self.current_selected_stock)
         rows = []
         if not df.empty:
@@ -117,25 +125,30 @@ class ChipInSightApp:
             self.logger.success("重新匹配成功！")
             await self.refresh_sell_match_table()
             await self.refresh_chip_price()
-            self.buy_dialog.close()
+            if self.buy_dialog:
+                self.buy_dialog.close()
 
     async def refresh_chip_stock_list(self):
         df = self.service.get_chip_summary("")
         df = df[df["hold_volume"] != 0].drop_duplicates("name")
         names = sorted(df["name"].tolist()) if not df.empty else []
-        self.chip_price_ui.clear_stock_list()
-        for name in names:
-            self.chip_price_ui.add_stock_item(name, lambda _, n=name: self._on_stock_click(n))
+
+        if self.chip_price_ui:
+            self.chip_price_ui.clear_stock_list()
+            for name in names:
+                self.chip_price_ui.add_stock_item(name, lambda _, n=name: self._on_stock_click(n))
+
         if names and not self.current_selected_stock:
             await self._on_stock_click(names[0])
 
-    async def _on_stock_click(self, stock_name):
+    async def _on_stock_click(self, stock_name: str):
         self.current_selected_stock = stock_name
         await self.refresh_chip_price()
 
     async def refresh_chip_price(self):
-        if not self.current_selected_stock:
+        if not self.current_selected_stock or not self.chip_price_ui:
             return
+
         df = self.service.get_chip_price(self.current_selected_stock)
         rows = []
         if not df.empty:
@@ -146,6 +159,8 @@ class ChipInSightApp:
         self.chip_price_ui.set_rows(rows)
 
     async def refresh_chip_summary(self):
+        if not self.summary_ui:
+            return
         keyword = self.summary_ui.get_search_keyword()
         df = self.service.get_chip_summary(keyword)
         rows = []
@@ -156,6 +171,8 @@ class ChipInSightApp:
         self.summary_ui.set_rows(rows)
 
     async def refresh_table(self):
+        if not self.trade_table_ui:
+            return
         keyword = self.trade_table_ui.get_search_keyword()
         df = self.service.get_all_trades()
         if keyword:
@@ -179,7 +196,8 @@ class ChipInSightApp:
             await self.refresh_all_data()
         else:
             self.logger.info(f"跳过重复：{fname}")
-        self.upload_card.reset()
+        if self.upload_card:
+            self.upload_card.reset()
 
     async def _confirm_clear(self):
         with ui.dialog() as dialog, ui.card().classes("p-6"):
