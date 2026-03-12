@@ -179,11 +179,11 @@ class ChipInSightUI:
             self.chip_stock_list.clear()
             with self.chip_stock_list:
                 for name in stock_names:
-                    ui.item(name, on_click=lambda n=name: self._on_stock_click(n)).classes(
+                    ui.item(name, on_click=lambda _=None, n=name: self._on_stock_click(n)).classes(
                         'cursor-pointer hover:bg-blue-50'
                     )
             if stock_names and not self.current_selected_stock:
-                self._on_stock_click(stock_names[0])
+                await self._on_stock_click(stock_names[0])
 
         except Exception as e:
             self.log(f"股票列表加载失败: {str(e)}", "error")
@@ -194,7 +194,7 @@ class ChipInSightUI:
 
     async def refresh_chip_price(self):
         try:
-            if not self.current_selected_stock:
+            if not self.current_selected_stock and self.chip_price_table is not None:
                 self.chip_price_table.rows = []
                 return
             df = self.db.get_chip_price(self.current_selected_stock)
@@ -207,7 +207,9 @@ class ChipInSightUI:
                 df["price_key"] = df["name"] + "_" + df["price"].astype(str)
                 rows = df.to_dict("records")
             
-            self.chip_price_table.rows = rows
+            if self.chip_price_table is not None:
+                self.chip_price_table.rows = rows
+
         except Exception as e:
             self.log(f"筹码价格加载失败: {str(e)}", "error")
 
