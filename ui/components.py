@@ -271,7 +271,6 @@ class BuyMatchDialogUI:
                     {"name": "time", "label": "买入时间", "field": "time", "sortable": True},
                     {"name": "price", "label": "买入价", "field": "price", "sortable": True},
                     {"name": "remain", "label": "剩余可匹配", "field": "remain", "sortable": True},
-                    {"name": "act", "label": "选择", "field": "act", "align": "center"},
                 ],
                 rows=[],
                 row_key="buy_id"
@@ -285,12 +284,15 @@ class BuyMatchDialogUI:
             ''')
             self.available_buy_table.on("rowClick", self.on_match)
             ui.button("关闭", on_click=lambda: self.dialog.close() if self.dialog else None).classes("mt-3").props("outline")
+
     def set_rows(self, rows):
         if self.available_buy_table:
             self.available_buy_table.rows = rows
+
     def open(self):
         if self.dialog:
             self.dialog.open()
+            
     def close(self):
         if self.dialog:
             self.dialog.close()
