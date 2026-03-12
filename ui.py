@@ -167,6 +167,7 @@ class ChipInSightUI:
                             rows=[],
                             row_key="price_key"
                         ).classes('w-full h-[260px]')
+
                         self.chip_price_table.add_slot('body-cell-net_volume', '''
                             <q-td :props="props">
                                 <q-badge :color="props.value > 0 ? 'red' : (props.value < 0 ? 'blue' : 'grey')">
@@ -190,9 +191,10 @@ class ChipInSightUI:
                     rows=[],
                     row_key="summary_key"
                 ).classes('w-full h-[260px]')
+                
                 self.chip_summary_table.add_slot('body-cell-hold_volume', '''
                     <q-td :props="props">
-                        <q-badge :color="props.value > 0 ? 'green' : (props.value < 0 ? 'red' : 'grey')">
+                        <q-badge :color="props.value > 0 ? 'red' : (props.value < 0 ? 'blue' : 'grey')">
                             {{ props.value }}
                         </q-badge>
                     </q-td>
@@ -215,6 +217,7 @@ class ChipInSightUI:
                     rows=[],
                     row_key='id'
                 ).classes('w-full h-[360px]')
+                
                 self.table.add_slot('body-cell-action', '''
                     <q-td :props="props">
                         <q-badge :color="props.value === '买入' ? 'red' : (props.value === '卖出' ? 'blue' : 'grey')">
