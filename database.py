@@ -29,8 +29,7 @@ class TradeDatabase:
                     UNIQUE(time, name, action, volume, price) 
                 )
             ''')
-
-            # === 新增：卖出买入匹配表 ===
+            # === 卖出买入匹配表 ===
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS trade_matches (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -146,8 +145,19 @@ class TradeDatabase:
             print(f"[ERROR] 筹码统计查询失败: {e}")
             return pd.DataFrame()
 
-    # ====================== 【新增】卖出匹配核心3方法 ======================
+    # ====================== 【新增】解绑方法：remove_sell_buy_match ======================
+    def remove_sell_buy_match(self, sell_id):
+        """删除该卖出单的所有匹配，释放筹码可重新匹配"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute('DELETE FROM trade_matches WHERE sell_id = ?', (int(sell_id),))
+                conn.commit()
+                return True
+        except Exception as e:
+            print(f"[ERROR] 解绑失败: {e}")
+            return False
 
+    # ====================== 卖出匹配核心方法 ======================
     def get_available_buys_for_match(self, stock_name):
         """获取某股票可用于匹配的买入（未卖完，含当天）"""
         try:
@@ -209,12 +219,11 @@ class TradeDatabase:
                     ORDER BY t.time DESC
                 '''
                 df = pd.read_sql_query(sql, conn, params=(stock_name,))
-
+                
                 # 计算盈利、盈利率
                 df['profit'] = 0.0
                 df['profit_pct'] = 0.0
                 df['buy_time'] = ''
-
                 for i, row in df.iterrows():
                     ap = row['avg_buy_price']
                     sp = row['sell_price']
@@ -234,7 +243,6 @@ class TradeDatabase:
             buy_id = int(buy_id)
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-
                 # 卖出剩余量
                 cursor.execute('''
                     SELECT t.volume - IFNULL(SUM(tm.match_volume),0)
@@ -243,7 +251,6 @@ class TradeDatabase:
                     WHERE t.id = ?
                 ''', (sell_id,))
                 sell_remain = cursor.fetchone()[0] or 0
-
                 # 买入剩余量
                 cursor.execute('''
                     SELECT t.volume - IFNULL(SUM(tm.match_volume),0)
@@ -252,11 +259,9 @@ class TradeDatabase:
                     WHERE t.id = ?
                 ''', (buy_id,))
                 buy_remain = cursor.fetchone()[0] or 0
-
                 match_vol = min(sell_remain, buy_remain)
                 if match_vol <= 0:
                     return False
-
                 # 写入匹配
                 cursor.execute('''
                     INSERT INTO trade_matches (sell_id, buy_id, match_volume)

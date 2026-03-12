@@ -9,6 +9,7 @@ import math
 
 class ChipInSightUI:
     def __init__(self, port: int = 8080, host: str = "0.0.0.0", log_file: str = "chipinsight.log"):
+        # ✅ 修复：正确传入 log_file
         self._setup_logging(log_file)
         
         self.parser = TradeImageParser()
@@ -32,7 +33,7 @@ class ChipInSightUI:
         self.current_matching_sell_id: str = ""
         self.buy_select_dialog: ui.dialog | None = None
         self.available_buy_table: ui.table | None = None
-
+        
         self._init_ui()
         ui.timer(0.5, self.refresh_all_data, once=True)
 
@@ -104,7 +105,6 @@ class ChipInSightUI:
                     with ui.column().classes('w-56 h-[320px] overflow-y-auto border rounded p-2'):
                         ui.label("选择股票").classes('text-sm font-semibold mb-2')
                         self.match_stock_list = ui.list().classes('w-full')
-
                     with ui.column().classes('flex-1'):
                         self.sell_match_table = ui.table(
                             columns=[
@@ -120,7 +120,7 @@ class ChipInSightUI:
                             rows=[],
                             row_key="sell_id"
                         ).classes('w-full h-[320px]')
-
+                        
                         self.sell_match_table.add_slot('body-cell-profit', '''
                             <q-td :props="props">
                                 <q-badge :color="props.value >= 0 ? 'red' : 'green'">
@@ -150,7 +150,15 @@ class ChipInSightUI:
                             </q-td>
                         ''')
 
-                        # 【最稳写法】不用自定义事件，直接用 on('rowClick')
+                        # 永远显示【匹配】按钮
+                        self.sell_match_table.add_slot('body-cell-act', '''
+                            <q-td :props="props">
+                                <q-button size="sm" color="primary" @click="$emit('row-click', props.row)">
+                                    匹配
+                                </q-button>
+                            </q-td>
+                        ''')
+
                         self.sell_match_table.on('rowClick', self._open_match_dialog)
 
             # 筹码价格板块
@@ -227,12 +235,11 @@ class ChipInSightUI:
                     </q-td>
                 ''')
 
-        # 匹配弹窗
         self._init_match_dialog()
 
     def _init_match_dialog(self):
         with ui.dialog() as self.buy_select_dialog, ui.card().classes('w-[700px] p-4'):
-            ui.label("选择要匹配的买入筹码（支持当天）").classes("text-lg font-bold mb-2")
+            ui.label("选择要匹配的买入筹码（可重新选择）").classes("text-lg font-bold mb-2")
             self.available_buy_table = ui.table(
                 columns=[
                     {"name": "time", "label": "买入时间", "field": "time", "sortable": True},
@@ -253,9 +260,8 @@ class ChipInSightUI:
             self.available_buy_table.on('rowClick', self._do_match)
             ui.button("关闭", on_click=self.buy_select_dialog.close).classes('mt-3').props('outline')
 
-    # ====================== 【终极修复】 ======================
     async def _open_match_dialog(self, e):
-        row = e.args[1]  # NiceGUI rowClick 固定格式
+        row = e.args[1]
         self.current_matching_sell_id = str(row["sell_id"])
         await self._load_available_buys()
         self.buy_select_dialog.open()
@@ -281,13 +287,18 @@ class ChipInSightUI:
         except Exception as e:
             self.log(f"加载可匹配买入失败：{str(e)}", "error")
 
+    # ====================== 核心修复：先解绑旧匹配 → 释放筹码 → 再新匹配 ======================
     async def _do_match(self, e):
         buy_row = e.args[1]
         buy_id = buy_row["buy_id"]
         try:
+            # 先删除这条卖出的旧匹配（关键！）
+            self.db.remove_sell_buy_match(self.current_matching_sell_id)
+            
+            # 重新匹配
             ok = self.db.create_sell_buy_match(self.current_matching_sell_id, buy_id)
             if ok:
-                self.log("匹配成功", "success")
+                self.log("重新匹配成功！", "success")
                 await self.refresh_sell_match_table()
                 await self.refresh_chip_price()
                 self.buy_select_dialog.close()
@@ -330,7 +341,7 @@ class ChipInSightUI:
                         "profit_pct": profit_pct,
                         "annual": annual,
                         "status": r.get("match_status", "未匹配"),
-                        "act": r.get("match_status", "未匹配")
+                        "act": "匹配"
                     })
             self.sell_match_table.rows = rows
         except Exception as e:
