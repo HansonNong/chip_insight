@@ -6,7 +6,7 @@ import gc
 from datetime import datetime
 
 class TradeDatabase:
-    def __init__(self, db_path: str = "data/chip_insight.db"):
+    def __init__(self, db_path: str = "db/data/chip_insight.db"):
         self.db_dir = os.path.dirname(db_path)
         if self.db_dir:
             os.makedirs(self.db_dir, exist_ok=True)

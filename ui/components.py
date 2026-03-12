@@ -1,0 +1,284 @@
+from nicegui import ui
+from typing import Callable
+
+# ==============================
+# HeaderUI
+# ==============================
+class HeaderUI:
+    def __init__(self, on_refresh: Callable, on_clear: Callable):
+        with ui.header().classes("items-center justify-between bg-slate-800 p-4"):
+            with ui.row().classes("items-center"):
+                ui.icon("auto_graph", size="lg").classes("text-white")
+                ui.label("ChipInSight").classes("text-h5 font-bold text-white")
+            with ui.row().classes("items-center gap-3"):
+                ui.button("刷新数据", icon="refresh", on_click=on_refresh).props("flat color=white")
+                ui.button("备份并重置", icon="history", on_click=on_clear).props("flat color=red-300")
+
+# ==============================
+# UploadCardUI
+# ==============================
+class UploadCardUI:
+    def __init__(self, on_upload: Callable):
+        self.uploader = None
+        self.tip_label = None
+        self._build(on_upload)
+
+    def _build(self, on_upload):
+        with ui.card().classes("w-full p-6 shadow-sm mb-6"):
+            ui.label("同步记录").classes("text-lg font-bold mb-2")
+            with ui.row().classes("w-full items-start gap-6"):
+                self.uploader = ui.upload(
+                    label="上传股票交易截图 (支持批量)",
+                    on_upload=on_upload,
+                    multiple=True,
+                    auto_upload=True
+                ).classes("flex-grow h-32")
+                with ui.column().classes("w-64 p-4 bg-gray-50 rounded"):
+                    ui.label("系统状态").classes("text-xs font-bold text-gray-400 uppercase")
+                    self.tip_label = ui.label("就绪").classes("text-sm text-gray-600 mt-1")
+
+    def reset(self):
+        self.uploader.reset()
+
+# ==============================
+# SellMatchUI
+# ==============================
+class SellMatchUI:
+    def __init__(self, on_stock_switch: Callable, on_row_click: Callable):
+        self.match_stock_list = None
+        self.sell_match_table = None
+        self.on_stock_switch = on_stock_switch
+        self.on_row_click = on_row_click
+        self._build()
+
+    def _build(self):
+        with ui.card().classes("w-full p-6 shadow-sm mb-6"):
+            ui.label("卖出筹码匹配").classes("text-xl font-bold mb-4")
+            with ui.row().classes("w-full gap-4"):
+                with ui.column().classes("w-56 h-[320px] overflow-y-auto border rounded p-2"):
+                    ui.label("选择股票").classes("text-sm font-semibold mb-2")
+                    self.match_stock_list = ui.list().classes("w-full")
+                with ui.column().classes("flex-1"):
+                    self.sell_match_table = ui.table(
+                        columns=[
+                            {"name": "time", "label": "卖出时间", "field": "time", "sortable": True},
+                            {"name": "price", "label": "卖出价", "field": "price", "sortable": True},
+                            {"name": "volume", "label": "卖出量", "field": "volume", "sortable": True},
+                            {"name": "profit", "label": "盈利", "field": "profit", "sortable": True},
+                            {"name": "profit_pct", "label": "盈利率", "field": "profit_pct", "sortable": True},
+                            {"name": "annual", "label": "年化", "field": "annual", "sortable": True},
+                            {"name": "status", "label": "状态", "field": "status", "align": "center"},
+                        ],
+                        rows=[],
+                        row_key="sell_id"
+                    ).classes("w-full h-[320px]")
+
+                    self.sell_match_table.add_slot("body-cell-profit", '''
+                        <q-td :props="props">
+                            <div v-if="props.row.status === '未匹配'" class="text-gray-600">
+                                {{ props.value.toFixed(2) }}
+                            </div>
+                            <q-badge v-else :color="props.value >= 0 ? 'red' : 'blue'">
+                                {{ props.value.toFixed(2) }}
+                            </q-badge>
+                        </q-td>
+                    ''')
+                    self.sell_match_table.add_slot("body-cell-profit_pct", '''
+                        <q-td :props="props">
+                            <div v-if="props.row.status === '未匹配'" class="text-gray-600">
+                                {{ (props.value*100).toFixed(2) }}%
+                            </div>
+                            <q-badge v-else :color="props.value >= 0 ? 'red' : 'blue'">
+                                {{ (props.value*100).toFixed(2) }}%
+                            </q-badge>
+                        </q-td>
+                    ''')
+                    self.sell_match_table.add_slot("body-cell-annual", '''
+                        <q-td :props="props">
+                            <div v-if="props.row.status === '未匹配'" class="text-gray-600">
+                                {{ (props.value*100).toFixed(2) }}%
+                            </div>
+                            <q-badge v-else :color="props.value >= 0 ? 'red' : 'blue'">
+                                {{ (props.value*100).toFixed(2) }}%
+                            </q-badge>
+                        </q-td>
+                    ''')
+                    self.sell_match_table.on("rowClick", self.on_row_click)
+
+    def set_rows(self, rows):
+        self.sell_match_table.rows = rows
+
+    def clear_stock_list(self):
+        self.match_stock_list.clear()
+
+    def add_stock_item(self, name, callback):
+        with self.match_stock_list:
+            ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
+
+# ==============================
+# ChipPriceUI
+# ==============================
+class ChipPriceUI:
+    def __init__(self, on_stock_click: Callable):
+        self.chip_stock_list = None
+        self.chip_price_table = None
+        self.on_stock_click = on_stock_click
+        self._build()
+
+    def _build(self):
+        with ui.card().classes("w-full p-6 shadow-sm mb-6"):
+            ui.label("筹码价格").classes("text-xl font-bold mb-4")
+            with ui.row().classes("w-full gap-4"):
+                with ui.column().classes("w-56 h-[260px] overflow-y-auto border rounded p-2"):
+                    ui.label("持仓股票").classes("text-sm font-semibold mb-2")
+                    self.chip_stock_list = ui.list().classes("w-full")
+                with ui.column().classes("flex-1"):
+                    self.chip_price_table = ui.table(
+                        columns=[
+                            {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                            {"name": "price", "label": "价格", "field": "price", "sortable": True},
+                            {"name": "net_volume", "label": "数量", "field": "net_volume", "sortable": True},
+                        ],
+                        rows=[],
+                        row_key="price_key"
+                    ).classes("w-full h-[260px]")
+                    self.chip_price_table.add_slot("body-cell-net_volume", '''
+                        <q-td :props="props">
+                            <q-badge :color="props.value > 0 ? 'red' : (props.value < 0 ? 'blue' : 'grey')">
+                                {{ props.value }}
+                            </q-badge>
+                        </q-td>
+                    ''')
+
+    def set_rows(self, rows):
+        self.chip_price_table.rows = rows
+
+    def clear_stock_list(self):
+        self.chip_stock_list.clear()
+
+    def add_stock_item(self, name, callback):
+        with self.chip_stock_list:
+            ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
+
+# ==============================
+# SummaryUI
+# ==============================
+class SummaryUI:
+    def __init__(self, on_search: Callable):
+        self.chip_summary_search = None
+        self.chip_summary_table = None
+        self.on_search = on_search
+        self._build()
+
+    def _build(self):
+        with ui.card().classes("w-full p-6 shadow-sm mb-6"):
+            ui.label("筹码统计").classes("text-xl font-bold mb-4")
+            self.chip_summary_search = ui.input(placeholder="搜索股票...").props("outlined dense").classes("w-64 mb-4")
+            self.chip_summary_search.on("input", self.on_search)
+            self.chip_summary_table = ui.table(
+                columns=[
+                    {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                    {"name": "total_buy", "label": "总买入", "field": "total_buy", "sortable": True},
+                    {"name": "total_sell", "label": "总卖出", "field": "total_sell", "sortable": True},
+                    {"name": "hold_volume", "label": "当前持仓", "field": "hold_volume", "sortable": True},
+                ],
+                rows=[],
+                row_key="summary_key"
+            ).classes("w-full h-[260px]")
+            self.chip_summary_table.add_slot("body-cell-hold_volume", '''
+                <q-td :props="props">
+                    <q-badge :color="props.value > 0 ? 'red' : (props.value < 0 ? 'blue' : 'grey')">
+                        {{ props.value }}
+                    </q-badge>
+                </q-td>
+            ''')
+
+    def get_search_keyword(self):
+        return self.chip_summary_search.value.strip() if self.chip_summary_search.value else ""
+
+    def set_rows(self, rows):
+        self.chip_summary_table.rows = rows
+
+# ==============================
+# TradeTableUI
+# ==============================
+class TradeTableUI:
+    def __init__(self, on_search: Callable):
+        self.search_input = None
+        self.table = None
+        self.on_search = on_search
+        self._build()
+
+    def _build(self):
+        with ui.card().classes("w-full p-6 shadow-sm"):
+            ui.label("流水明细").classes("text-xl font-bold mb-4")
+            self.search_input = ui.input(placeholder="搜索股票...").props("outlined dense").classes("w-64 mb-4")
+            self.search_input.on("input", self.on_search)
+            self.table = ui.table(
+                columns=[
+                    {"name": "time", "label": "时间", "field": "time", "sortable": True},
+                    {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                    {"name": "action", "label": "动作", "field": "action", "align": "center"},
+                    {"name": "price", "label": "价格", "field": "price", "sortable": True},
+                    {"name": "volume", "label": "数量", "field": "volume", "sortable": True},
+                    {"name": "amount", "label": "金额", "field": "amount", "sortable": True},
+                ],
+                rows=[],
+                row_key="id"
+            ).classes("w-full h-[360px]")
+            self.table.add_slot("body-cell-action", '''
+                <q-td :props="props">
+                    <q-badge :color="props.value === '买入' ? 'red' : (props.value === '卖出' ? 'blue' : 'grey')">
+                        {{ props.value }}
+                    </q-badge>
+                </q-td>
+            ''')
+
+    def get_search_keyword(self):
+        return self.search_input.value.strip() if self.search_input.value else ""
+
+    def set_rows(self, rows):
+        self.table.rows = rows
+
+# ==============================
+# BuyMatchDialogUI
+# ==============================
+class BuyMatchDialogUI:
+    def __init__(self, on_match: Callable):
+        self.dialog = None
+        self.available_buy_table = None
+        self.on_match = on_match
+        self._build()
+
+    def _build(self):
+        self.dialog = ui.dialog()
+        with self.dialog, ui.card().classes("w-[700px] p-4"):
+            ui.label("选择要匹配的买入筹码（可重新选择）").classes("text-lg font-bold mb-2")
+            self.available_buy_table = ui.table(
+                columns=[
+                    {"name": "time", "label": "买入时间", "field": "time", "sortable": True},
+                    {"name": "price", "label": "买入价", "field": "price", "sortable": True},
+                    {"name": "remain", "label": "剩余可匹配", "field": "remain", "sortable": True},
+                    {"name": "act", "label": "选择", "field": "act", "align": "center"},
+                ],
+                rows=[],
+                row_key="buy_id"
+            ).classes("h-[300px]")
+            self.available_buy_table.add_slot("body-cell-act", '''
+                <q-td :props="props">
+                    <q-button size="sm" color="primary" @click="$emit('row-click', props.row)">
+                        选择
+                    </q-button>
+                </q-td>
+            ''')
+            self.available_buy_table.on("rowClick", self.on_match)
+            ui.button("关闭", on_click=lambda: self.dialog.close()).classes("mt-3").props("outline")
+
+    def set_rows(self, rows):
+        self.available_buy_table.rows = rows
+
+    def open(self):
+        self.dialog.open()
+
+    def close(self):
+        self.dialog.close()
