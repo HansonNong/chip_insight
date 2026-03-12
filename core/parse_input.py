@@ -4,12 +4,14 @@ import numpy as np
 import cv2
 from typing import Any, cast
 from rapidocr_onnxruntime import RapidOCR
+from datetime import date
 
 class TradeImageParser:
     def __init__(self, y_threshold: int = 20):
         self.engine = RapidOCR()
         self.re_action = re.compile(r'买入|卖出')
         self.re_date_time = re.compile(r'\d{8,14}')
+        self.re_time_only = re.compile(r'\d{4,6}') 
         self.y_threshold = y_threshold
 
     def _get_rows(self, img_data: np.ndarray) -> list[list[str]]:
@@ -95,8 +97,11 @@ class TradeImageParser:
                     if not clean_num: 
                         continue
                         
-                    if len(clean_num) >= 8 and self.re_date_time.fullmatch(clean_num):
+                    if self.re_date_time.fullmatch(clean_num):
                         buffer['time'] = clean_num
+                    elif self.re_time_only.fullmatch(clean_num):
+                        today = date.today().strftime("%Y%m%d")
+                        buffer['time'] = today + clean_num.zfill(6) 
                     elif '.' in clean_num:
                         val = float(clean_num)
                         if buffer.get('price') == 0.0: 
@@ -115,7 +120,8 @@ class TradeImageParser:
         df = pd.DataFrame(records)
         if not df.empty:
             if 'time' in df.columns:
-                df['time'] = pd.to_datetime(df['time'], errors='coerce').fillna(pd.Timestamp.now())
+                df['time'] = pd.to_datetime(df['time'], format='%Y%m%d%H%M%S', errors='coerce')
+                df['time'] = df['time'].fillna(pd.Timestamp.now())
                 
             df['price'] = df['price'].fillna(0.0)
             df['volume'] = df['volume'].fillna(0).astype(int)
