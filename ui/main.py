@@ -181,15 +181,19 @@ class ChipInSightApp:
             code_input = ui.input(
                 label="股票代码",
                 value=current_code,
-                placeholder="例如：000001"
+                placeholder="请输入6位数字股票代码"
             ).props("outlined dense").classes("w-full mb-4")
 
             async def _save():
                 new_code = code_input.value.strip()
-                if new_code:
-                    self.service.update_stock_code(stock_name, new_code)
-                    ui.notify(f"✅ {stock_name} 代码已保存：{new_code}")
-                    await self.refresh_chip_summary()
+
+                if not new_code.isdigit() or len(new_code) != 6:
+                    ui.notify("股票代码必须是6位数字", type="negative")
+                    return
+
+                self.service.update_stock_code(stock_name, new_code)
+                ui.notify(f"{stock_name} 代码保存成功：{new_code}", type="positive")
+                await self.refresh_chip_summary()
                 dialog.close()
 
             with ui.row().classes("justify-end gap-3 mt-4"):
