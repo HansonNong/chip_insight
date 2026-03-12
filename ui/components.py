@@ -24,9 +24,9 @@ class UploadCardUI:
         self.tip_label: ui.label | None = None
         self._build(on_upload)
     def _build(self, on_upload):
-        with ui.card().classes("w-full p-6 shadow-sm mb-6"):
+        with ui.card().classes("p-6 shadow-sm mb-6"):
             ui.label("同步记录").classes("text-lg font-bold mb-2")
-            with ui.row().classes("w-full items-start gap-6"):
+            with ui.row().classes("items-start gap-6"):
                 self.uploader = ui.upload(
                     label="上传股票交易截图 (支持批量)",
                     on_upload=on_upload,
@@ -51,9 +51,9 @@ class SellMatchUI:
         self.on_row_click = on_row_click
         self._build()
     def _build(self):
-        with ui.card().classes("w-full p-6 shadow-sm mb-6"):
+        with ui.card().classes("p-6 shadow-sm mb-6"):
             ui.label("卖出筹码匹配").classes("text-xl font-bold mb-4")
-            with ui.row().classes("w-full gap-4"):
+            with ui.row().classes("gap-4"):
                 with ui.column().classes("w-56 h-[320px] overflow-y-auto border rounded p-2"):
                     ui.label("选择股票").classes("text-sm font-semibold mb-2")
                     self.match_stock_list = ui.list().classes("w-full")
@@ -70,7 +70,7 @@ class SellMatchUI:
                         ],
                         rows=[],
                         row_key="sell_id"
-                    ).classes("w-full h-[320px]")
+                    ).classes("h-[320px]")
                     self.sell_match_table.add_slot("body-cell-profit", '''
                         <q-td :props="props">
                             <div v-if="props.row.status === '未匹配'" class="text-gray-600">
@@ -126,22 +126,29 @@ class ChipPriceUI:
         self._build()
     
     def _build(self):
-        with ui.card().classes("w-full p-6 shadow-sm mb-6"):
-            ui.label("筹码价格 + 分布").classes("text-xl font-bold mb-4")  # 修改标题
-            with ui.row().classes("w-full gap-4"):
-                with ui.column().classes("w-56"):
-                    ui.label("持仓股票").classes("text-sm font-semibold mb-2")
-                    self.chip_stock_list = ui.list().classes("w-full h-[260px] overflow-y-auto border rounded p-2 mb-4")
+        with ui.card().classes("p-4 sm:p-6 shadow-sm mb-6"):
+            ui.label("筹码价格 + 分布").classes("text-xl font-bold mb-4")
+            
+            with ui.column().classes("gap-6"):
+                
+                with ui.row().classes("gap-4 flex-col md:flex-row items-stretch"):
                     
-                    self.chip_price_table = ui.table(
-                        columns=[
-                            {"name": "name", "label": "股票", "field": "name", "sortable": True},
-                            {"name": "price", "label": "价格", "field": "price", "sortable": True},
-                            {"name": "net_volume", "label": "数量", "field": "net_volume", "sortable": True},
-                        ],
-                        rows=[],
-                        row_key="price_key"
-                    ).classes("w-full h-[200px]")
+                    with ui.column().classes("md:w-56"):
+                        ui.label("持仓股票").classes("text-sm font-semibold mb-2")
+                        self.chip_stock_list = ui.list().classes("h-[200px] md:h-[260px] overflow-y-auto border rounded p-2")
+                    
+                    with ui.column().classes("flex-grow"):
+                        ui.label("价格分布明细").classes("text-sm font-semibold mb-2")
+                        self.chip_price_table = ui.table(
+                            columns=[
+                                {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                                {"name": "price", "label": "价格", "field": "price", "sortable": True},
+                                {"name": "net_volume", "label": "数量", "field": "net_volume", "sortable": True},
+                            ],
+                            rows=[],
+                            row_key="price_key"
+                        ).classes("h-[260px]")
+
                     self.chip_price_table.add_slot("body-cell-net_volume", '''
                         <q-td :props="props">
                             <q-badge :color="props.value > 0 ? 'red' : (props.value < 0 ? 'blue' : 'grey')">
@@ -152,7 +159,7 @@ class ChipPriceUI:
                 
                 with ui.column().classes("flex-1"):
                     ui.label("筹码分布对比").classes("text-sm font-semibold mb-2")
-                    self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("w-full h-[480px]")  # 新增图表
+                    self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("h-[600px]")  # 新增图表
     
     def set_rows(self, rows):
         if self.chip_price_table:
@@ -184,7 +191,7 @@ class SummaryUI:
         self._build()
 
     def _build(self):
-        with ui.card().classes("w-full p-6 shadow-sm mb-6"):
+        with ui.card().classes("p-6 shadow-sm mb-6"):
             ui.label("筹码统计").classes("text-xl font-bold mb-4")
 
             self.chip_summary_search = ui.input(
@@ -202,7 +209,7 @@ class SummaryUI:
                 ],
                 rows=[],
                 row_key="summary_key"
-            ).classes("w-full h-[260px]")
+            ).classes("h-[260px]")
 
             self.chip_summary_table.add_slot("body-cell-code", '''
                 <q-td :props="props">
@@ -244,7 +251,7 @@ class TradeTableUI:
         self.on_search = on_search
         self._build()
     def _build(self):
-        with ui.card().classes("w-full p-6 shadow-sm"):
+        with ui.card().classes("p-6 shadow-sm"):
             ui.label("流水明细").classes("text-xl font-bold mb-4")
             
             self.search_input = ui.input(
@@ -263,7 +270,7 @@ class TradeTableUI:
                 ],
                 rows=[],
                 row_key="id"
-            ).classes("w-full h-[360px]")
+            ).classes("h-[360px]")
             self.table.add_slot("body-cell-action", '''
                 <q-td :props="props">
                     <q-badge :color="props.value === '买入' ? 'red' : (props.value === '卖出' ? 'blue' : 'grey')">

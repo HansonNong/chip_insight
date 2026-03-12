@@ -176,26 +176,26 @@ class ChipInSightApp:
         if summary_df.empty:
             self.chip_price_ui.set_chip_plot(go.Figure())
             self.logger.warn(f"{self.current_selected_stock} 无代码信息，无法获取行情")
-            ui.notify(f"{self.current_selected_stock} 无代码信息，无法获取行情")
+            ui.notify(f"{self.current_selected_stock} 无代码信息，无法获取行情", position="left")
             return
         
         stock_code = summary_df.iloc[0].get("code", "")
         if not stock_code:
             self.chip_price_ui.set_chip_plot(go.Figure())
             self.logger.warn(f"{self.current_selected_stock} 未配置股票代码，请先在筹码统计中填写")
-            ui.notify(f"{self.current_selected_stock} 未配置股票代码，请先在筹码统计中填写")
+            ui.notify(f"{self.current_selected_stock} 未配置股票代码，请先在筹码统计中填写", position="left")
             return
 
         # 2. Get stock data
         self.logger.info(f"正在获取 {self.current_selected_stock}({stock_code}) 行情数据...")
-        ui.notify(f"正在获取 {self.current_selected_stock} 行情数据...")
+        ui.notify(f"正在获取 {self.current_selected_stock} 行情数据...", position="left")
         await asyncio.sleep(0.01)
 
         kline_df, std_code = get_stock_data(stock_code)
         if kline_df is None or kline_df.empty:
             self.chip_price_ui.set_chip_plot(go.Figure())
             self.logger.warn(f"{self.current_selected_stock} 行情数据获取失败")
-            ui.notify(f"{self.current_selected_stock} 行情数据获取失败")
+            ui.notify(f"{self.current_selected_stock} 行情数据获取失败", position="left")
             return
 
         # 3. Generate chip distribution data
@@ -219,7 +219,7 @@ class ChipInSightApp:
         if self.chip_price_ui.chip_dist_plot:
             self.chip_price_ui.chip_dist_plot.update()
         self.logger.success(f"{self.current_selected_stock} 筹码分布图生成完成")
-        ui.notify(f"{self.current_selected_stock} 筹码分布图生成完成")
+        ui.notify(f"{self.current_selected_stock} 筹码分布图生成完成", position="left")
 
     async def refresh_chip_price(self):
         if not self.current_selected_stock or not self.chip_price_ui:
@@ -264,11 +264,11 @@ class ChipInSightApp:
                 new_code = code_input.value.strip()
 
                 if not new_code.isdigit() or len(new_code) != 6:
-                    ui.notify("股票代码必须是6位数字", type="negative")
+                    ui.notify("股票代码必须是6位数字", type="negative", position="left")
                     return
 
                 self.service.update_stock_code(stock_name, new_code)
-                ui.notify(f"{stock_name} 代码保存成功：{new_code}", type="positive")
+                ui.notify(f"{stock_name} 代码保存成功：{new_code}", type="positive", position="left")
                 await self.refresh_chip_summary()
                 dialog.close()
 
@@ -322,10 +322,10 @@ class ChipInSightApp:
 
     async def _handle_clear(self, dialog):
         if self.service.backup_and_clear():
-            ui.notify("备份并重置成功", type="positive")
+            ui.notify("备份并重置成功", type="positive", position="left")
             await self.refresh_all_data()
         else:
-            ui.notify("重置失败", type="negative")
+            ui.notify("重置失败", type="negative", position="left")
         dialog.close()
 
     async def refresh_all_data(self):
@@ -337,4 +337,10 @@ class ChipInSightApp:
         await self.refresh_table()
 
     def run(self):
-        ui.run(title=Config.APP_TITLE, host=Config.HOST, port=Config.PORT, reload=Config.RELOAD)
+        ui.run(
+            title=Config.APP_TITLE, 
+            host=Config.HOST, 
+            port=Config.PORT, 
+            reload=Config.RELOAD, 
+            show=Config.SHOW
+        )
