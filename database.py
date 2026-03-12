@@ -7,6 +7,7 @@ from datetime import datetime
 
 class TradeDatabase:
     def __init__(self, db_path: str = "data/chip_insight.db"):
+        # Create database directory if not exists
         self.db_dir = os.path.dirname(db_path)
         if self.db_dir:
             os.makedirs(self.db_dir, exist_ok=True)
@@ -15,6 +16,7 @@ class TradeDatabase:
         self._init_db()
 
     def _init_db(self) -> None:
+        # Initialize trade table
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS trades (
@@ -32,6 +34,7 @@ class TradeDatabase:
             conn.commit()
 
     def save_trades(self, df: pd.DataFrame) -> int:
+        # Save trade records from DataFrame
         if df.empty: 
             return 0
             
@@ -45,7 +48,8 @@ class TradeDatabase:
                         trade_time = trade_time.strftime('%Y-%m-%d %H:%M:%S')
                     
                     cursor.execute('''
-                        INSERT OR IGNORE INTO trades (time, name, action, price, volume, amount)
+                        INSERT OR IGNORE INTO trades 
+                        (time, name, action, price, volume, amount)
                         VALUES (?, ?, ?, ?, ?, ?)
                     ''', (
                         str(trade_time),
@@ -64,13 +68,18 @@ class TradeDatabase:
         return new_rows
 
     def get_all_trades(self) -> pd.DataFrame:
+        # Get all trades sorted by time descending
         try:
             with sqlite3.connect(self.db_path) as conn:
-                return pd.read_sql_query("SELECT * FROM trades ORDER BY time DESC", conn)
+                return pd.read_sql_query(
+                    "SELECT * FROM trades ORDER BY time DESC", 
+                    conn
+                )
         except Exception:
             return pd.DataFrame()
 
     def clear_all_trades(self) -> bool:
+        # Backup and reset database
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = f"{self.db_path}.{timestamp}.bak"
@@ -89,16 +98,16 @@ class TradeDatabase:
             print(f"[DATABASE ERROR] 备份并重置失败: {e}")
             return False
 
-    # ========== 关键：添加缺失的 get_chip_price 方法 ==========
     def get_chip_price(self, stock_name: str | None = None) -> pd.DataFrame:
+        # Query chip volume grouped by stock and price
         try:
             with sqlite3.connect(self.db_path) as conn:
                 query = '''
                     SELECT 
                         name,
                         price,
-                        SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) as buy_volume,
-                        SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) as sell_volume
+                        SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) AS buy_volume,
+                        SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) AS sell_volume
                     FROM trades 
                 '''
                 params = []
@@ -113,16 +122,17 @@ class TradeDatabase:
             print(f"[ERROR] 筹码价格查询失败: {e}")
             return pd.DataFrame()
 
-    # ========== 关键：添加缺失的 get_chip_summary 方法 ==========
     def get_chip_summary(self, stock_name: str | None = None) -> pd.DataFrame:
+        # Query total buy/sell/hold volume per stock
         try:
             with sqlite3.connect(self.db_path) as conn:
                 query = '''
                     SELECT 
                         name,
-                        SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) as total_buy,
-                        SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) as total_sell,
-                        SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) - SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) as hold_volume
+                        SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) AS total_buy,
+                        SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) AS total_sell,
+                        (SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) 
+                        - SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END)) AS hold_volume
                     FROM trades 
                 '''
                 params = []
