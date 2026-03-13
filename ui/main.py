@@ -85,10 +85,17 @@ class ChipInSightApp:
         if not df.empty:
             df["time"] = df["time"].astype(str).str.replace("T", " ")
             for _, r in df.iterrows():
-                profit = round(r.get("profit", 0), 2)
-                profit_pct = round(r.get("profit_pct", 0), 4)
-                buy_time = r.get("buy_time") or r.get("buy_date") or r["time"]
-                annual = self.service.calc_annual(buy_time, r["time"], profit_pct)
+                profit: float = round(r.get("profit", 0), 2)
+                profit_pct: float = r.get("profit_pct", 0)
+
+                buy_time = r.get("buy_time")
+                status = r.get("match_status", "未匹配")
+
+                if status == "已匹配" and buy_time:
+                    annual = self.service.calc_annual(buy_time, r["time"], profit_pct)
+                else:
+                    annual = 0 
+
                 rows.append({
                     "sell_id": str(r["id"]),
                     "time": r["time"],
@@ -97,7 +104,7 @@ class ChipInSightApp:
                     "profit": profit,
                     "profit_pct": profit_pct,
                     "annual": annual,
-                    "status": r.get("match_status", "未匹配"),
+                    "status": status,
                 })
         self.sell_match_ui.set_rows(rows)
 

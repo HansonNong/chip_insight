@@ -17,17 +17,17 @@ class TradeService:
     def backup_and_clear(self):
         return self.db.clear_all_trades()
 
-    def calc_annual(self, buy_time_str, sell_time_str, profit_pct):
+    def calc_annual(self, buy_time_str, sell_time_str, profit_pct) -> float:
         try:
             bt = pd.to_datetime(buy_time_str).date()
             st = pd.to_datetime(sell_time_str).date()
-            days = (st - bt).days
-            days = max(days, 1)
-            profit_pct = float(profit_pct)
-            annual = (1 + profit_pct) ** (365 / days) - 1
-            return round(annual, 4)
+            days = max((st - bt).days, 1)
+            
+            val = float(profit_pct) * (365 / days)
+            return val
+                        
         except Exception:
-            return 0.0
+            return 0
 
     def remove_match(self, sell_id):
         return self.db.remove_sell_buy_match(sell_id)

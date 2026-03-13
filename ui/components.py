@@ -65,7 +65,7 @@ class SellMatchUI:
                             {"name": "volume", "label": "卖出量", "field": "volume", "sortable": True},
                             {"name": "profit", "label": "盈利", "field": "profit", "sortable": True},
                             {"name": "profit_pct", "label": "盈利率", "field": "profit_pct", "sortable": True},
-                            {"name": "annual", "label": "年化", "field": "annual", "sortable": True},
+                            {"name": "annual", "label": "年化(单利)", "field": "annual", "sortable": True},
                             {"name": "status", "label": "状态", "field": "status", "align": "center"},
                         ],
                         rows=[],
