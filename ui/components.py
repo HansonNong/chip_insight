@@ -168,16 +168,23 @@ class ChipPriceUI:
                 ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
 
 class SummaryUI:
-    def __init__(self, on_search: Callable, on_code_edit: Callable):
+    def __init__(self, on_search: Callable, on_code_edit: Callable, on_auto_fill: Callable):
         self.chip_summary_search: ui.input | None = None
         self.chip_summary_table: ui.table | None = None
         self.on_search = on_search
         self.on_code_edit = on_code_edit
+        self.on_auto_fill = on_auto_fill
         self._build()
 
     def _build(self):
         with ui.card().classes("p-2 sm:p-6"):
             ui.label("筹码统计").classes("text-xl font-bold mb-4")
+            ui.button(
+                "自动补全代码", 
+                icon="magic_button", 
+                on_click=self.on_auto_fill
+            ).props("flat dense color=primary")
+
 
             self.chip_summary_search = ui.input(
                 placeholder="搜索股票...", 

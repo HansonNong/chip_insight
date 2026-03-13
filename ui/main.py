@@ -53,7 +53,11 @@ class ChipInSightApp:
                 on_row_click=self._open_match_dialog
             )
             self.chip_price_ui = ChipPriceUI(on_stock_click=self._on_stock_click)
-            self.summary_ui = SummaryUI(on_search=self.refresh_chip_summary, on_code_edit=self._edit_stock_code)
+            self.summary_ui = SummaryUI(
+                on_search=self.refresh_chip_summary, 
+                on_code_edit=self._edit_stock_code, 
+                on_auto_fill=self._handle_auto_fill
+            )
             self.trade_table_ui = TradeTableUI(on_search=self.refresh_table)
 
         self.buy_dialog = BuyMatchDialogUI(on_match=self._do_match)
@@ -355,6 +359,17 @@ class ChipInSightApp:
         else:
             ui.notify("重置失败", type="negative", position="left")
         dialog.close()
+
+    async def _handle_auto_fill(self):
+        ui.notify("正在匹配 A 股代码...", loading=True, position="left")
+        # 在线程中运行耗时匹配
+        count = await asyncio.to_thread(self.service.auto_fill_missing_codes)
+        
+        if count > 0:
+            ui.notify(f"成功自动补全 {count} 个股票代码", type="positive", position="left")
+            await self.refresh_chip_summary()
+        else:
+            ui.notify("未发现可匹配的代码，请手动填写", type="warning", position="left")
 
     async def refresh_all_data(self):
         await self.refresh_match_stock_list()

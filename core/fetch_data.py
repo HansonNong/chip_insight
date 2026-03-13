@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta
 import akshare as ak
 import pandas as pd
-import re
 import threading
+import json
+import re
+import os
 
 
 def timeout_handler(seconds):
@@ -65,6 +68,38 @@ def get_stock_data(symbol: str, period: int = 60) -> tuple[pd.DataFrame | None, 
     return df, code
 
 
+# 在 fetch_data.py 中添加以下逻辑
+def get_all_a_shares_map(cache_dir: str = "./db") -> dict:
+    """
+    获取全量A股映射表 {名称: 代码}，每天更新一次缓存
+    """
+    cache_path = os.path.join(cache_dir, "stock_mapping_cache.json")
+    
+    # 检查缓存是否有效 (存在且是24小时内更新)
+    if os.path.exists(cache_path):
+        mtime = datetime.fromtimestamp(os.path.getmtime(cache_path))
+        if datetime.now() - mtime < timedelta(days=1):
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+
+    # 缓存失效或不存在，从 akshare 拉取
+    try:
+        print("正在从 akshare 更新全量股票映射表...")
+        df = ak.stock_info_a_code_name()
+        # 转换为字典，key 为名称，value 为代码
+        mapping = dict(zip(df['name'], df['code']))
+        
+        # 写入缓存
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+        return mapping
+    except Exception as e:
+        print(f"更新映射表失败: {e}")
+
+        return {}
+
+    
 if __name__ == "__main__":
     my_symbol = "603667" 
     target_dir="./cache"

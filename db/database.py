@@ -1,9 +1,9 @@
-import sqlite3
-import os
-import pandas as pd
-import shutil
-import gc
 from datetime import datetime
+import pandas as pd
+import sqlite3
+import shutil
+import os
+import gc
 
 class TradeDatabase:
     def __init__(self, db_path: str = "db/data/chip_insight.db"):
@@ -47,6 +47,7 @@ class TradeDatabase:
     def save_trades(self, df: pd.DataFrame) -> int:
         if df.empty: 
             return 0
+        
         new_rows = 0
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
