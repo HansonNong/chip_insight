@@ -7,24 +7,22 @@ from rapidocr_onnxruntime import RapidOCR
 from datetime import date
 
 class TradeImageParser:
-    def __init__(self, y_threshold: int = 20):
+    def __init__(self, y_threshold: int = 45):
         self.engine = RapidOCR()
         self.re_action = re.compile(r'买入|卖出')
         self.re_date_time = re.compile(r'\d{8,14}')
-        self.re_time_only = re.compile(r'\d{4,6}') 
+        self.re_time_only = re.compile(r'\d{6}') 
         self.y_threshold = y_threshold
 
-    def _get_rows(self, img_data: np.ndarray) -> list[list[str]]:
+    def _get_rows(self, img_data: np.ndarray) -> list[list[dict[str, Any]]]:
         result, _ = self.engine(img_data)
-        if not result: 
+        if not result:
             return []
 
-        items: list[dict[str, Any]] = []
+        items = []
         for line in result:
             coords = cast(list[list[float]], line[0])
             text = str(line[1]).strip()
-            
-            # Calculate center coordinates
             y_coords = [float(p[1]) for p in coords]
             x_coords = [float(p[0]) for p in coords]
             items.append({
@@ -32,122 +30,129 @@ class TradeImageParser:
                 'y': sum(y_coords)/4.0, 
                 'text': text
             })
-
-        if not items: 
-            return []
-            
-        # Group text items into rows by Y coordinate
-        items.sort(key=lambda x: x['y'])
-        rows: list[list[str]] = []
-        current_row = [items[0]]
         
+        if not items:
+            return []
+
+        # Group items into rows based on Y coordinate threshold
+        items.sort(key=lambda x: x['y'])
+        rows_data = []
+        current_row = [items[0]]
+
         for i in range(1, len(items)):
             if abs(items[i]['y'] - current_row[-1]['y']) <= self.y_threshold:
                 current_row.append(items[i])
             else:
                 current_row.sort(key=lambda x: x['x'])
-                rows.append([it['text'] for it in current_row])
+                rows_data.append(current_row)
                 current_row = [items[i]]
-        
+
         current_row.sort(key=lambda x: x['x'])
-        rows.append([it['text'] for it in current_row])
-        return rows
+        rows_data.append(current_row)
+        return rows_data
 
     def parse(self, img_input: str | bytes) -> pd.DataFrame:
-        # Handle both file paths and raw bytes
-        img_data: np.ndarray | None = None
+        img_data = None
         if isinstance(img_input, bytes):
             nparr = np.frombuffer(img_input, np.uint8)
             img_data = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         else:
             img_data = cv2.imread(str(img_input))
 
-        if img_data is None: 
+        if img_data is None:
             return pd.DataFrame()
 
-        rows = self._get_rows(img_data)
-        records: list[dict[str, Any]] = []
-        buffer: dict[str, Any] = {}
+        img_width = img_data.shape[1]
+        rows_data = self._get_rows(img_data)
+        records = []
+        buffer = {}
 
-        for row in rows:
-            row_str = "".join(row)
+        for row in rows_data:
+            row_texts = [it['text'] for it in row]
+            row_str = "".join(row_texts)
             action_match = self.re_action.search(row_str)
 
-            # Detect new trade entry
             if action_match:
-                if 'name' in buffer and ('price' in buffer or 'volume' in buffer):
+                # Save previous record if valid
+                if 'name' in buffer and (buffer.get('price', 0) > 0 or buffer.get('volume', 0) > 0):
                     records.append(buffer.copy())
                 
+                # Identify stock name: Non-numeric text in the left half, length >= 2
+                stock_name = "Unknown"
+                for it in row:
+                    x_ratio = it['x'] / img_width
+                    if x_ratio < 0.5:
+                        clean_num = re.sub(r'[^\d.]', '', it['text'])
+                        if not clean_num and len(it['text']) >= 2:
+                            stock_name = it['text']
+                            break
+                
                 buffer = {
-                    'name': row[0], 
+                    'name': stock_name, 
                     'action': action_match.group(), 
                     'price': 0.0, 
                     'volume': 0, 
                     'amount': 0.0, 
                     'time': None
                 }
-                search_items = row[1:]
+                search_items = row
             else:
                 search_items = row
 
-            # Extract numeric values and timestamps
             if 'name' in buffer:
-                for item in search_items:
-                    clean_num = re.sub(r'[^\d.]', '', item)
-                    if not clean_num: 
+                for it in search_items:
+                    item_text = it['text']
+                    clean_num = re.sub(r'[^\d.]', '', item_text)
+                    if not clean_num:
                         continue
-                        
+                    
                     if self.re_date_time.fullmatch(clean_num):
                         buffer['time'] = clean_num
-                    elif self.re_time_only.fullmatch(clean_num):
-                        today = date.today().strftime("%Y%m%d")
-                        buffer['time'] = today + clean_num.zfill(6) 
                     elif '.' in clean_num:
                         val = float(clean_num)
-                        if buffer.get('price') == 0.0: 
+                        if buffer.get('price') == 0.0:
                             buffer['price'] = val
-                        else: 
+                        else:
                             buffer['amount'] = val
                     elif clean_num.isdigit():
                         val_int = int(clean_num)
-                        if buffer.get('volume') == 0: 
+                        # Avoid matching 6-digit time as volume
+                        if buffer.get('volume') == 0 and not self.re_time_only.fullmatch(clean_num):
                             buffer['volume'] = val_int
+                        elif self.re_time_only.fullmatch(clean_num) and buffer.get('time') is None:
+                            today = date.today().strftime("%Y%m%d")
+                            buffer['time'] = today + clean_num
 
-        if 'name' in buffer and ('price' in buffer or 'volume' in buffer):
+        # Push the last record
+        if 'name' in buffer and (buffer.get('price', 0) > 0 or buffer.get('volume', 0) > 0):
             records.append(buffer)
 
-        # Post-process DataFrame
+        # Post-processing with Pandas
         df = pd.DataFrame(records)
         if not df.empty:
             if 'time' in df.columns:
                 df['time'] = pd.to_datetime(df['time'], format='%Y%m%d%H%M%S', errors='coerce')
-                df['time'] = df['time'].fillna(pd.Timestamp.now())
-                
+                df['time'] = df['time'].ffill().fillna(pd.Timestamp.now())
+            
             df['price'] = df['price'].fillna(0.0)
             df['volume'] = df['volume'].fillna(0).astype(int)
             df['amount'] = df['amount'].fillna(0.0)
             
-            # Calculate missing amounts
+            # Calibration: handle OCR missed amount
             mask = (df['amount'] == 0.0) & (df['price'] > 0) & (df['volume'] > 0)
             df.loc[mask, 'amount'] = df['price'] * df['volume']
             
         return df
-    
+
 if __name__ == "__main__":
-    test_image_path = "test_files/parse_record.jpg"
+    test_image_path = "test_files/screenshot2.jpg"
     parser = TradeImageParser()
     
-    print(f"[*] Processing image: {test_image_path}")
     try:
         result_df = parser.parse(test_image_path)
-        
         if not result_df.empty:
-            print("[+] Successfully parsed records:")
-            print("-" * 80)
             print(result_df.to_string(index=False))
-            print("-" * 80)
         else:
-            print("[-] No records found. Check image or OCR.")
-            
+            print("No records found.")
     except Exception as e:
-        print(f"[!] An error occurred during parsing: {e}")
+        print(f"Error: {e}")
