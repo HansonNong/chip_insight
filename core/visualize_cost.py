@@ -95,6 +95,7 @@ class ChipDistVisualizer:
         self, 
         data: dict[str, Any], 
         own_chips: list[tuple[float, int]] = [], 
+        cluster_threshold_prop: float = 0.02,  
         max_hold_chip_xspan: float = 0.4
     ) -> go.Figure:
         
@@ -145,7 +146,7 @@ class ChipDistVisualizer:
 
         if own_chips:
             y_span = data["y_range"][1] - data["y_range"][0]
-            cluster_threshold = y_span * 0.02  # 2% 纵向区间作为聚合阈值
+            cluster_threshold = y_span * cluster_threshold_prop
             max_chip_density = max(data['chips']) if max(data['chips']) > 0 else 1
             
             own_chips.sort(key=lambda x: x[0], reverse=True)
@@ -164,6 +165,7 @@ class ChipDistVisualizer:
             global_max_vol = max([v for p, v in own_chips])
 
             for cluster in clusters:
+
                 if len(cluster) == 1:
                     price, vol = cluster[0]
                     line_length = max_chip_density * max_hold_chip_xspan * (vol / global_max_vol)
@@ -176,7 +178,7 @@ class ChipDistVisualizer:
 
                     fig.add_annotation(
                         x=line_length, y=price,
-                        text=f" 持有: {price:.2f} ({vol}股)",
+                        text=f" {price:.2f} ({vol/100:.0f}手)",
                         showarrow=False, xanchor="left", yanchor="middle",
                         font=dict(size=10), xref="x2", yref="y2"
                     )
@@ -200,7 +202,7 @@ class ChipDistVisualizer:
 
                     fig.add_annotation(
                         x=cluster_width, y=(min_p + max_p) / 2,
-                        text=f" <b>聚合: {avg_p:.2f} (共{total_vol}股)</b>",
+                        text=f" <b>{avg_p:.2f} ({total_vol/100:.0f}手)</b>",
                         showarrow=False, xanchor="left", yanchor="middle",
                         font=dict(size=10), 
                         xref="x2", yref="y2"
