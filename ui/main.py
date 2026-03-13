@@ -211,7 +211,6 @@ class ChipInSightApp:
         # 5. Render plot with distribution data and own chips
         fig = self.chip_visualizer.render_plot(
             data=dist_data,
-            stock_code=std_code,
             own_chips=own_chips
         )
 

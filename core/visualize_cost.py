@@ -94,8 +94,8 @@ class ChipDistVisualizer:
     def render_plot(
         self, 
         data: dict[str, Any], 
-        stock_code: str = "",
-        own_chips: list[tuple[float, int]] = [] 
+        own_chips: list[tuple[float, int]] = [], 
+        max_hold_chip_xspan: float = 0.4
     ) -> go.Figure:
         
         if not data:
@@ -144,41 +144,67 @@ class ChipDistVisualizer:
         )
 
         if own_chips:
-            valid_volumes = [v for p, v in own_chips if v > 0]
-            max_volume = max(valid_volumes) if valid_volumes else 0
+            y_span = data["y_range"][1] - data["y_range"][0]
+            cluster_threshold = y_span * 0.02  # 2% 纵向区间作为聚合阈值
             max_chip_density = max(data['chips']) if max(data['chips']) > 0 else 1
-            text_offset = max_chip_density * 0.05 if max_chip_density > 0 else 0.001
+            
+            own_chips.sort(key=lambda x: x[0], reverse=True)
+            
+            clusters = []
+            if own_chips:
+                current_cluster = [own_chips[0]]
+                for i in range(1, len(own_chips)):
+                    if abs(current_cluster[-1][0] - own_chips[i][0]) < cluster_threshold:
+                        current_cluster.append(own_chips[i])
+                    else:
+                        clusters.append(current_cluster)
+                        current_cluster = [own_chips[i]]
+                clusters.append(current_cluster)
 
-            for price, volume in own_chips:
-                if volume <= 0:
-                    continue
-                ratio = volume / max_volume if max_volume > 0 else 0
-                line_length = max_chip_density * 1.2 * ratio
+            global_max_vol = max([v for p, v in own_chips])
 
-                fig.add_trace(
-                    go.Scatter(
-                        x=[0, line_length], 
-                        y=[price, price],
-                        mode="lines",
-                        line=dict(color="black", width=1),
-                        showlegend=False,
-                        hovertemplate=f"自有筹码<br>价格: {price:.2f}<br>数量: {volume}股<extra></extra>"
-                    ),
-                    row=1, col=2
-                )
+            for cluster in clusters:
+                if len(cluster) == 1:
+                    price, vol = cluster[0]
+                    line_length = max_chip_density * max_hold_chip_xspan * (vol / global_max_vol)
+                    
+                    fig.add_trace(go.Scatter(
+                        x=[0, line_length], y=[price, price],
+                        mode="lines", line=dict(color="#333", width=1),
+                        showlegend=False, hoverinfo="skip"
+                    ), row=1, col=2)
 
-                fig.add_annotation(
-                    x=line_length + text_offset, 
-                    y=price,
-                    text=f"持有:{volume}股",
-                    showarrow=False,
-                    font=dict(color="black", size=10),
-                    xref="x2", 
-                    yref="y2", 
-                    align="left",
-                    bgcolor="rgba(255,255,255,0.8)",
-                    borderpad=2 
-                )
+                    fig.add_annotation(
+                        x=line_length, y=price,
+                        text=f" 持有: {price:.2f} ({vol}股)",
+                        showarrow=False, xanchor="left", yanchor="middle",
+                        font=dict(size=10), xref="x2", yref="y2"
+                    )
+                else:
+                    prices = [c[0] for c in cluster]
+                    vols = [c[1] for c in cluster]
+                    total_vol = sum(vols)
+                    min_p, max_p = min(prices), max(prices)
+                    avg_p = sum(p * v for p, v in zip(prices, vols)) / total_vol
+                    
+                    cluster_width = max_chip_density * max_hold_chip_xspan * (total_vol / global_max_vol)
+
+                    fig.add_trace(go.Scatter(
+                        x=[0, cluster_width, cluster_width, 0],
+                        y=[min_p, min_p, max_p, max_p],
+                        fill="toself", fillcolor="rgba(100, 100, 100, 0.2)",
+                        line=dict(color="rgba(0,0,0,0.5)", width=1),
+                        hovertemplate=f"聚合持仓<br>均价: {avg_p:.2f}<br>总数: {total_vol}<extra></extra>",
+                        showlegend=False
+                    ), row=1, col=2)
+
+                    fig.add_annotation(
+                        x=cluster_width, y=(min_p + max_p) / 2,
+                        text=f" <b>聚合: {avg_p:.2f} (共{total_vol}股)</b>",
+                        showarrow=False, xanchor="left", yanchor="middle",
+                        font=dict(size=10), 
+                        xref="x2", yref="y2"
+                    )
 
         fig.add_hline(y=data['last_price'], line_dash="dot", line_color="red", row=1, col=1,
                     annotation_text=f"最新价:{data['last_price']:.2f}")
@@ -223,7 +249,7 @@ if __name__ == "__main__":
         
         filename=os.path.basename(test_file)
         if res: 
-            fig = viz.render_plot(res, stock_code="sh603667", own_chips=test_own_chips)
+            fig = viz.render_plot(res, own_chips=test_own_chips)
             fig.show()
     else:
         print(f"File {test_file} not exist! ")
