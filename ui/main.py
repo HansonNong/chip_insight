@@ -175,13 +175,13 @@ class ChipInSightApp:
         summary_df = self.service.get_chip_summary(self.current_selected_stock)
         if summary_df.empty:
             self.chip_price_ui.set_chip_plot(go.Figure())
-            ui.notify(f"{self.current_selected_stock} 无代码信息", type='warning')
+            ui.notify(f"{self.current_selected_stock} 无代码信息", type='warning', position="left")
             return
         
         stock_code = summary_df.iloc[0].get("code", "")
         if not stock_code:
             self.chip_price_ui.set_chip_plot(go.Figure())
-            ui.notify(f"{self.current_selected_stock} 未配置代码", type='warning')
+            ui.notify(f"{self.current_selected_stock} 未配置代码", type='warning', position="left")
             return
 
         self.logger.info(f"正在获取 {self.current_selected_stock} 行情数据...")
@@ -193,7 +193,7 @@ class ChipInSightApp:
         
         if kline_df is None or kline_df.empty:
             self.chip_price_ui.set_chip_plot(go.Figure())
-            ui.notify(f"{self.current_selected_stock} 行情数据获取失败", type='negative')
+            ui.notify(f"{self.current_selected_stock} 行情数据获取失败", type='negative', position="left")
             return
 
         dist_data = await asyncio.to_thread(self.chip_visualizer.generate_distribution, kline_df)
@@ -291,17 +291,24 @@ class ChipInSightApp:
     async def _parse_trade_image(self, evt: events.UploadEventArguments):
         fname = evt.file.name
         self.logger.info(f"处理中：{fname}")
+        ui.notify(f"处理中：{fname}", position="left")
+        
+        await asyncio.sleep(0.1) 
+
         img_bytes = await evt.file.read()
         df = self.service.parse_image(img_bytes)
         if df.empty:
             self.logger.warn(f"无法识别：{fname}")
+            ui.notify(f"无法识别：{fname}", type="negative", position="left")
             return
         added = self.service.save_trades(df)
         if added > 0:
-            self.logger.success(f"完成：{fname}(+{added})")
+            self.logger.success(f"完成：新增{added}条记录")
+            ui.notify(f"完成：新增{added}条记录", type="positive", position="left")
             await self.refresh_all_data()
         else:
             self.logger.info(f"跳过重复：{fname}")
+            ui.notify(f"跳过重复：{fname}", type="warning", position="left")
         if self.upload_card:
             self.upload_card.reset()
 
