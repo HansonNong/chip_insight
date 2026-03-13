@@ -172,54 +172,48 @@ class ChipInSightApp:
         if not self.current_selected_stock or not self.chip_price_ui:
             return
 
-        # 1. Get stock code
         summary_df = self.service.get_chip_summary(self.current_selected_stock)
         if summary_df.empty:
             self.chip_price_ui.set_chip_plot(go.Figure())
-            self.logger.warn(f"{self.current_selected_stock} 无代码信息，无法获取行情")
-            ui.notify(f"{self.current_selected_stock} 无代码信息，无法获取行情", position="left")
+            ui.notify(f"{self.current_selected_stock} 无代码信息", type='warning')
             return
         
         stock_code = summary_df.iloc[0].get("code", "")
         if not stock_code:
             self.chip_price_ui.set_chip_plot(go.Figure())
-            self.logger.warn(f"{self.current_selected_stock} 未配置股票代码，请先在筹码统计中填写")
-            ui.notify(f"{self.current_selected_stock} 未配置股票代码，请先在筹码统计中填写", position="left")
+            ui.notify(f"{self.current_selected_stock} 未配置代码", type='warning')
             return
 
-        # 2. Get stock data
-        self.logger.info(f"正在获取 {self.current_selected_stock}({stock_code}) 行情数据...")
-        ui.notify(f"正在获取 {self.current_selected_stock} 行情数据...", position="left")
-        await asyncio.sleep(0.01)
+        self.logger.info(f"正在获取 {self.current_selected_stock} 行情数据...")
+        ui.notify(f"正在获取 {self.current_selected_stock} 行情数据...", position="left", duration=1)
+        
+        await asyncio.sleep(0.1) 
 
-        kline_df, std_code = get_stock_data(stock_code)
+        kline_df, std_code = await asyncio.to_thread(get_stock_data, stock_code)
+        
         if kline_df is None or kline_df.empty:
             self.chip_price_ui.set_chip_plot(go.Figure())
-            self.logger.warn(f"{self.current_selected_stock} 行情数据获取失败")
-            ui.notify(f"{self.current_selected_stock} 行情数据获取失败", position="left")
+            ui.notify(f"{self.current_selected_stock} 行情数据获取失败", type='negative')
             return
 
-        # 3. Generate chip distribution data
-        dist_data = self.chip_visualizer.generate_distribution(kline_df)
+        dist_data = await asyncio.to_thread(self.chip_visualizer.generate_distribution, kline_df)
+        
         if not dist_data:
             self.chip_price_ui.set_chip_plot(go.Figure())
             return
 
-        # 4. Get own chips for annotation on the plot
         own_chips = await self.get_own_chips(self.current_selected_stock)
 
-        # 5. Render plot with distribution data and own chips
-        fig = self.chip_visualizer.render_plot(
-            data=dist_data,
+        fig = await asyncio.to_thread(
+            self.chip_visualizer.render_plot, 
+            data=dist_data, 
             own_chips=own_chips
         )
 
-        # 6. Update the UI with the new plot
         self.chip_price_ui.set_chip_plot(fig)
-        if self.chip_price_ui.chip_dist_plot:
-            self.chip_price_ui.chip_dist_plot.update()
+        
         self.logger.success(f"{self.current_selected_stock} 筹码分布图生成完成")
-        ui.notify(f"{self.current_selected_stock} 筹码分布图生成完成", position="left")
+        ui.notify(f"{self.current_selected_stock} 筹码分布图生成完成", type='positive', position="left")
 
     async def refresh_chip_price(self):
         if not self.current_selected_stock or not self.chip_price_ui:
