@@ -166,33 +166,42 @@ class TradeDatabase:
             print(f"[ERROR] 解绑失败: {e}")
             return False
 
-    def get_available_buys_for_match(self, stock_name):
+    def get_available_buys_for_match(self, stock_name, current_sell_id=None):
         try:
             with sqlite3.connect(self.db_path) as conn:
                 sql = '''
-                    WITH buy_matched AS (
-                        SELECT buy_id, SUM(match_volume) AS matched
+                    WITH other_matches AS (
+                        SELECT buy_id, SUM(match_volume) AS vol
                         FROM trade_matches
+                        WHERE sell_id != ?
+                        GROUP BY buy_id
+                    ),
+                    current_matches AS (
+                        SELECT buy_id, SUM(match_volume) AS vol
+                        FROM trade_matches
+                        WHERE sell_id = ?
                         GROUP BY buy_id
                     )
                     SELECT 
                         t.id,
                         t.time,
-                        t.name,
                         t.price,
                         t.volume,
-                        (t.volume - IFNULL(bm.matched, 0)) AS remain_volume
+                        (t.volume - IFNULL(om.vol, 0)) AS total_remain,
+                        IFNULL(cm.vol, 0) AS current_matched_vol
                     FROM trades t
-                    LEFT JOIN buy_matched bm ON t.id = bm.buy_id
+                    LEFT JOIN other_matches om ON t.id = om.buy_id
+                    LEFT JOIN current_matches cm ON t.id = cm.buy_id
                     WHERE t.action = '买入'
                       AND t.name = ?
-                      AND (t.volume - IFNULL(bm.matched, 0)) > 0
+                      AND ( (t.volume - IFNULL(om.vol, 0)) > 0 OR IFNULL(cm.vol, 0) > 0 )
                     ORDER BY t.time ASC
                 '''
-                df = pd.read_sql_query(sql, conn, params=(stock_name,))
+                df = pd.read_sql_query(sql, conn, params=(current_sell_id, current_sell_id, stock_name))
                 return df
+            
         except Exception as e:
-            print(f"[ERROR] 可匹配买入查询失败: {e}")
+            print(f"[ERROR] 可匹配查询失败: {e}")
             return pd.DataFrame()
 
     def get_sell_records_with_match(self, stock_name):
@@ -265,8 +274,10 @@ class TradeDatabase:
                     LEFT JOIN trade_matches tm ON t.id = tm.buy_id
                     WHERE t.id = ?
                 ''', (buy_id,))
+                
                 buy_remain = cursor.fetchone()[0] or 0
                 match_vol = min(sell_remain, buy_remain)
+
                 if match_vol <= 0:
                     return False
                 
@@ -292,6 +303,21 @@ class TradeDatabase:
                 ''', (code.strip(), stock_name))
                 conn.commit()
                 return cursor.rowcount > 0
+            
         except Exception as e:
             print(f"[ERROR] 更新股票代码失败: {e}")
+            return False
+        
+    def delete_specific_match(self, sell_id, buy_id):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    'DELETE FROM trade_matches WHERE sell_id = ? AND buy_id = ?', 
+                    (int(sell_id), int(buy_id))
+                )
+                conn.commit()
+                return True
+            
+        except Exception as e:
+            print(f"[ERROR] 撤销特定匹配失败: {e}")
             return False

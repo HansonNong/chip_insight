@@ -2,9 +2,7 @@ from nicegui import ui
 from typing import Callable
 import plotly.graph_objects as go
 
-# ==============================
-# HeaderUI
-# ==============================
+
 class HeaderUI:
     def __init__(self, on_refresh: Callable, on_clear: Callable):
         with ui.header().classes("items-center justify-between bg-slate-800 p-4"):
@@ -15,9 +13,6 @@ class HeaderUI:
                 ui.button("刷新数据", icon="refresh", on_click=on_refresh).props("flat color=white")
                 ui.button("备份并重置", icon="history", on_click=on_clear).props("flat color=red-300")
 
-# ==============================
-# UploadCardUI
-# ==============================
 class UploadCardUI:
     def __init__(self, on_upload: Callable):
         self.uploader: ui.upload | None = None
@@ -40,9 +35,6 @@ class UploadCardUI:
         if self.uploader:
             self.uploader.reset()
 
-# ==============================
-# SellMatchUI
-# ==============================
 class SellMatchUI:
     def __init__(self, on_stock_switch: Callable, on_row_click: Callable):
         self.match_stock_list: ui.list | None = None
@@ -113,10 +105,6 @@ class SellMatchUI:
             with self.match_stock_list:
                 ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
 
-
-# ==============================
-# ChipPriceUI
-# ==============================
 class ChipPriceUI:
     def __init__(self, on_stock_click: Callable):
         self.chip_stock_list: ui.list | None = None
@@ -179,9 +167,6 @@ class ChipPriceUI:
             with self.chip_stock_list:
                 ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
 
-# ==============================
-# SummaryUI
-# ==============================
 class SummaryUI:
     def __init__(self, on_search: Callable, on_code_edit: Callable):
         self.chip_summary_search: ui.input | None = None
@@ -241,9 +226,6 @@ class SummaryUI:
         if self.chip_summary_table:
             self.chip_summary_table.rows = rows
 
-# ==============================
-# TradeTableUI
-# ==============================
 class TradeTableUI:
     def __init__(self, on_search: Callable):
         self.search_input: ui.input | None = None
@@ -284,37 +266,48 @@ class TradeTableUI:
         if self.table:
             self.table.rows = rows
 
-# ==============================
-# BuyMatchDialogUI
-# ==============================
 class BuyMatchDialogUI:
     def __init__(self, on_match: Callable):
         self.dialog: ui.dialog | None = None
         self.available_buy_table: ui.table | None = None
         self.on_match = on_match
         self._build()
+
     def _build(self):
         self.dialog = ui.dialog()
-        with self.dialog, ui.card().classes("w-[700px] p-4"):
-            ui.label("选择要匹配的买入筹码（可重新选择）").classes("text-lg font-bold mb-2")
+        with self.dialog, ui.card().classes("w-[750px] p-4"):
+            ui.label("选择或撤销匹配的买入筹码").classes("text-lg font-bold mb-2")
             self.available_buy_table = ui.table(
                 columns=[
                     {"name": "time", "label": "买入时间", "field": "time", "sortable": True},
                     {"name": "price", "label": "买入价", "field": "price", "sortable": True},
-                    {"name": "remain", "label": "剩余可匹配", "field": "remain", "sortable": True},
+                    {"name": "remain", "label": "可用/总额", "field": "display_vol", "sortable": True},
+                    {"name": "status", "label": "当前状态", "field": "status", "align": "center"},
+                    {"name": "act", "label": "操作", "field": "act", "align": "center"},
                 ],
                 rows=[],
                 row_key="buy_id"
-            ).classes("h-[300px]")
-            self.available_buy_table.add_slot("body-cell-act", '''
+            ).classes("h-[400px]")
+            
+            self.available_buy_table.add_slot("body-cell-status", '''
                 <q-td :props="props">
-                    <q-button size="sm" color="primary" @click="$emit('row-click', props.row)">
-                        选择
-                    </q-button>
+                    <q-badge :color="props.value === '已选择' ? 'green' : 'grey'">
+                        {{ props.value }}
+                    </q-badge>
                 </q-td>
             ''')
-            self.available_buy_table.on("rowClick", self.on_match)
-            ui.button("关闭", on_click=lambda: self.dialog.close() if self.dialog else None).classes("mt-3").props("outline")
+
+            self.available_buy_table.add_slot("body-cell-act", '''
+                <q-td :props="props">
+                    <q-btn size="sm" 
+                        :color="props.row.is_matched ? 'orange' : 'primary'" 
+                        :label="props.row.is_matched ? '撤销匹配' : '进行匹配'"
+                        @click="() => $parent.$emit('match', props.row)" />
+                </q-td>
+            ''')
+            self.available_buy_table.on("match", self.on_match)
+            
+            ui.button("关闭", on_click=self.dialog.close).classes("mt-3 w-full").props("outline")
 
     def set_rows(self, rows):
         if self.available_buy_table:

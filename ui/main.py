@@ -116,10 +116,9 @@ class ChipInSightApp:
             self.buy_dialog.open()
 
     async def _load_available_buys(self):
-        if not self.buy_dialog:
-            return
+        if not self.buy_dialog: return
         
-        df = self.service.get_available_buys(self.current_selected_stock)
+        df = self.service.get_available_buys(self.current_selected_stock, self.current_matching_sell_id)
         rows = []
         if not df.empty:
             df["time"] = df["time"].astype(str).str.replace("T", " ")
@@ -128,23 +127,44 @@ class ChipInSightApp:
                     "buy_id": str(r["id"]),
                     "time": r["time"],
                     "price": round(r["price"], 2),
-                    "remain": int(r["remain_volume"]),
-                    "act": "选择"
+                    "display_vol": f"{int(r['total_remain'])} / {int(r['volume'])}",
+                    "status": "已选择" if r["current_matched_vol"] > 0 else "未选择",
+                    "is_matched": r["current_matched_vol"] > 0 
                 })
         self.buy_dialog.set_rows(rows)
 
     async def _do_match(self, e):
-        buy_row = e.args[1]
-        buy_id = buy_row["buy_id"]
-        self.service.remove_match(self.current_matching_sell_id)
+        try:
+            buy_row = e.args if hasattr(e, 'args') else e
+            
+            if hasattr(buy_row, 'args'):
+                buy_row = buy_row.args
+
+            if isinstance(buy_row, list) and len(buy_row) > 0:
+                buy_row = buy_row[0]
+
+            buy_id = buy_row.get("buy_id")
+            is_matched = buy_row.get("is_matched", False) or buy_row.get("status") == "已选择"
         
-        ok = self.service.create_match(self.current_matching_sell_id, buy_id)
-        if ok:
-            self.logger.success("重新匹配成功！")
+            if not buy_id or not self.current_matching_sell_id:
+                ui.notify(f"参数缺失: buy_id={buy_id}, sell_id={self.current_matching_sell_id}", type='negative')
+                return
+
+            if is_matched:
+                self.db.delete_specific_match(self.current_matching_sell_id, buy_id)
+                ui.notify("已撤销匹配", color='orange')
+            else:
+                self.service.create_match(self.current_matching_sell_id, buy_id)
+                ui.notify("匹配成功", color='positive')
+
+            await self._load_available_buys()
             await self.refresh_sell_match_table()
             await self.refresh_chip_price()
-            if self.buy_dialog:
-                self.buy_dialog.close()
+            
+        except Exception as err:
+            print(f"CRITICAL ERROR: {err}")
+            import traceback
+            traceback.print_exc()
 
     async def refresh_chip_stock_list(self):
         df = self.service.get_chip_summary("")

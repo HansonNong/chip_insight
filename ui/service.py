@@ -35,8 +35,8 @@ class TradeService:
     def create_match(self, sell_id, buy_id):
         return self.db.create_sell_buy_match(sell_id, buy_id)
 
-    def get_available_buys(self, stock_name):
-        return self.db.get_available_buys_for_match(stock_name)
+    def get_available_buys(self, stock_name, sell_id=None):
+        return self.db.get_available_buys_for_match(stock_name, sell_id)
 
     def get_sell_records_with_match(self, stock_name):
         return self.db.get_sell_records_with_match(stock_name)
