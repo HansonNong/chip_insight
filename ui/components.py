@@ -24,7 +24,7 @@ class UploadCardUI:
         self.tip_label: ui.label | None = None
         self._build(on_upload)
     def _build(self, on_upload):
-        with ui.card().classes("p-6 shadow-sm mb-6"):
+        with ui.card().classes("p-2 sm:p-6"):
             ui.label("同步记录").classes("text-lg font-bold mb-2")
             with ui.row().classes("items-start gap-6"):
                 self.uploader = ui.upload(
@@ -51,7 +51,7 @@ class SellMatchUI:
         self.on_row_click = on_row_click
         self._build()
     def _build(self):
-        with ui.card().classes("p-6 shadow-sm mb-6"):
+        with ui.card().classes("p-2 sm:p-6"):
             ui.label("卖出筹码匹配").classes("text-xl font-bold mb-4")
             with ui.row().classes("gap-4"):
                 with ui.column().classes("w-56 h-[320px] overflow-y-auto border rounded p-2"):
@@ -121,7 +121,7 @@ class ChipPriceUI:
     def __init__(self, on_stock_click: Callable):
         self.chip_stock_list: ui.list | None = None
         self.chip_price_table: ui.table | None = None
-        self.chip_dist_plot: ui.plotly | None = None  # 新增：筹码分布图
+        self.chip_dist_plot: ui.plotly | None = None 
         self.on_stock_click = on_stock_click
         self._build()
     
@@ -159,7 +159,7 @@ class ChipPriceUI:
                 
                 with ui.column().classes("flex-1"):
                     ui.label("筹码分布对比").classes("text-sm font-semibold mb-2")
-                    self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("h-[600px]")  # 新增图表
+                    self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("h-[500px] w-[500px]")
     
     def set_rows(self, rows):
         if self.chip_price_table:
@@ -191,7 +191,7 @@ class SummaryUI:
         self._build()
 
     def _build(self):
-        with ui.card().classes("p-6 shadow-sm mb-6"):
+        with ui.card().classes("p-2 sm:p-6"):
             ui.label("筹码统计").classes("text-xl font-bold mb-4")
 
             self.chip_summary_search = ui.input(
@@ -251,7 +251,7 @@ class TradeTableUI:
         self.on_search = on_search
         self._build()
     def _build(self):
-        with ui.card().classes("p-6 shadow-sm"):
+        with ui.card().classes("p-2 sm:p-6"):
             ui.label("流水明细").classes("text-xl font-bold mb-4")
             
             self.search_input = ui.input(

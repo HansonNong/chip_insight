@@ -41,7 +41,8 @@ class ChipInSightApp:
     def _build_ui(self):
         ui.page_title(Config.APP_TITLE)
         self.header = HeaderUI(on_refresh=self.refresh_all_data, on_clear=self._confirm_clear)
-        with ui.column().classes("w-full mx-auto my-2 px-2 min-h-[80vh] sm:max-w-6xl sm:my-6 sm:p-4"):
+        ui.add_head_html('<meta name="viewport" content="width=device-width, initial-scale=0.6, maximum-scale=1.0">')
+        with ui.column().classes("w-full mx-auto my-1 px-1 sm:px-2 min-h-[80vh] sm:max-w-6xl"):
             self.upload_card = UploadCardUI(on_upload=self._parse_trade_image)
 
             if self.upload_card and self.upload_card.tip_label:

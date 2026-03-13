@@ -197,9 +197,16 @@ class ChipDistVisualizer:
         fig.update_yaxes(range=data["y_range"], row=1, col=1)
         fig.update_layout(
             template="plotly_white", 
-            margin=dict(l=50, r=80, t=110, b=50), 
+            margin=dict(l=10, r=10, t=80, b=10),
             hovermode="y unified",
-            height=500  
+            dragmode='pan',
+            xaxis=dict(fixedrange=False),
+            yaxis=dict(fixedrange=True),
+            modebar=dict(
+                remove=['zoom2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d']
+            ), 
+            height=500, 
+            autosize=True,
         )
         return fig
 
