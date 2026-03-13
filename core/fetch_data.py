@@ -1,7 +1,35 @@
 import akshare as ak
 import pandas as pd
 import re
+import threading
 
+
+def timeout_handler(seconds):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            res = [Exception(f"Function {func.__name__} timed out after {seconds}s")]
+            def target():
+                try:
+                    res[0] = func(*args, **kwargs)
+                except Exception as e:
+                    res[0] = e
+            
+            thread = threading.Thread(target=target)
+            thread.daemon = True
+            thread.start()
+            thread.join(seconds)
+            
+            if thread.is_alive():
+                print(f"警告: {func.__name__} 执行超时！")
+                return None, "" 
+            if isinstance(res[0], Exception):
+                raise res[0]
+            return res[0]
+        return wrapper
+    return decorator
+
+
+@timeout_handler(seconds=10)
 def get_stock_data(symbol: str, period: int = 60) -> tuple[pd.DataFrame | None, str]:
     pure_symbol = re.sub(r"[^0-9]", "", symbol)
     if not pure_symbol:
