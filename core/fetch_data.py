@@ -33,7 +33,7 @@ def timeout_handler(seconds):
 
 
 @timeout_handler(seconds=10)
-def get_stock_data(symbol: str, period: int = 60) -> tuple[pd.DataFrame | None, str]:
+def get_stock_data(symbol: str, period: int = 60, manual_float_shares: float = 0) -> tuple[pd.DataFrame | None, str]:
     pure_symbol = re.sub(r"[^0-9]", "", symbol)
     if not pure_symbol:
         return None, ""
@@ -43,12 +43,15 @@ def get_stock_data(symbol: str, period: int = 60) -> tuple[pd.DataFrame | None, 
     else:
         code = f"sh{pure_symbol}" if pure_symbol.startswith("6") else f"sz{pure_symbol}"
 
-    try:
-        info_df = ak.stock_individual_info_em(symbol=pure_symbol)
-        float_shares = float(info_df[info_df['item'] == '流通股']['value'].values[0])
-    except Exception as e:
-        print(f"获取流通股失败: {e}")
-        return None, code
+    if manual_float_shares > 0:
+        float_shares = manual_float_shares * 100000000 
+    else:
+        try:
+            info_df = ak.stock_individual_info_em(symbol=pure_symbol)
+            float_shares = float(info_df[info_df['item'] == '流通股']['value'].values[0])
+        except Exception as e:
+            print(f"获取流通股失败: {e}")
+            return None, code
 
     try:
         df = ak.stock_zh_a_minute(symbol=code, period=str(period), adjust="qfq")

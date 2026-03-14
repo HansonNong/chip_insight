@@ -130,14 +130,18 @@ class TradeDatabase:
                 cursor = conn.cursor()
                 cursor.execute("PRAGMA table_info(trades)")
                 columns = [col[1] for col in cursor.fetchall()]
+                # 动态增加字段
                 if "code" not in columns:
                     cursor.execute("ALTER TABLE trades ADD COLUMN code TEXT DEFAULT ''")
-                    conn.commit()
+                if "float_shares" not in columns:
+                    cursor.execute("ALTER TABLE trades ADD COLUMN float_shares REAL DEFAULT 0")
+                conn.commit()
 
                 query = '''
                     SELECT 
                         name,
                         COALESCE(MAX(code), '') as code,
+                        COALESCE(MAX(float_shares), 0) as float_shares, -- 增加字段查询
                         SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) AS total_buy,
                         SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) AS total_sell,
                         (SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) 
@@ -321,4 +325,19 @@ class TradeDatabase:
             
         except Exception as e:
             print(f"[ERROR] 撤销特定匹配失败: {e}")
+            return False
+        
+    def update_float_shares(self, stock_name: str, float_shares: float) -> bool:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE trades 
+                    SET float_shares = ? 
+                    WHERE name = ?
+                ''', (float_shares, stock_name))
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            print(f"[ERROR] 更新流通股失败: {e}")
             return False

@@ -102,3 +102,6 @@ class TradeService:
                     self.db.update_stock_code(name, matched_code)
                     count += 1
         return count
+    
+    def update_float_shares(self, stock_name: str, float_shares: float):
+        return self.db.update_float_shares(stock_name, float_shares)

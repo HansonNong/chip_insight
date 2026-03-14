@@ -151,15 +151,15 @@ class ChipInSightApp:
             is_matched = buy_row.get("is_matched", False) or buy_row.get("status") == "已选择"
         
             if not buy_id or not self.current_matching_sell_id:
-                ui.notify(f"参数缺失: buy_id={buy_id}, sell_id={self.current_matching_sell_id}", type='negative')
+                ui.notify(f"参数缺失: buy_id={buy_id}, sell_id={self.current_matching_sell_id}", type='negative', position="left")
                 return
 
             if is_matched:
                 self.db.delete_specific_match(self.current_matching_sell_id, buy_id)
-                ui.notify("已撤销匹配", color='orange')
+                ui.notify("已撤销匹配", color='orange', position="left")
             else:
                 self.service.create_match(self.current_matching_sell_id, buy_id)
-                ui.notify("匹配成功", color='positive')
+                ui.notify("匹配成功", color='positive', position="left")
 
             await self._load_available_buys()
             await self.refresh_sell_match_table()
@@ -205,14 +205,21 @@ class ChipInSightApp:
 
         summary_df = self.service.get_chip_summary(self.current_selected_stock)
         if summary_df.empty:
-            self.chip_price_ui.set_chip_plot(go.Figure())
-            ui.notify(f"{self.current_selected_stock} 无代码信息", type='warning', position="left")
             return
         
-        stock_code = summary_df.iloc[0].get("code", "")
+        row = summary_df.iloc[0]
+        stock_code = row.get("code", "")
+        float_shares = row.get("float_shares", 0)
+
+        # 检查代码
         if not stock_code:
-            self.chip_price_ui.set_chip_plot(go.Figure())
             ui.notify(f"{self.current_selected_stock} 未配置代码", type='warning', position="left")
+            return
+
+        # 检查流通股，如果没有则弹出输入框并中止
+        if float_shares <= 0:
+            ui.notify(f"请先配置 {self.current_selected_stock} 的自由流通股", type='warning', position="left")
+            await self._edit_float_shares(row)
             return
 
         self.logger.info(f"正在获取 {self.current_selected_stock} 行情数据...")
@@ -220,7 +227,7 @@ class ChipInSightApp:
         
         await asyncio.sleep(0.1) 
 
-        kline_df, std_code = await asyncio.to_thread(get_stock_data, stock_code)
+        kline_df, std_code = await asyncio.to_thread(get_stock_data, stock_code, 60, float_shares)
         
         if kline_df is None or kline_df.empty:
             self.chip_price_ui.set_chip_plot(go.Figure())
@@ -370,6 +377,35 @@ class ChipInSightApp:
             await self.refresh_chip_summary()
         else:
             ui.notify("未发现可匹配的代码，请手动填写", type="warning", position="left")
+
+    async def _edit_float_shares(self, row):
+        stock_name = row["name"]
+        current_val = row.get("float_shares", 0)
+
+        with ui.dialog() as dialog, ui.card().classes("p-6 w-[400px]"):
+            ui.label(f"配置自由流通股：{stock_name}").classes("text-lg font-bold mb-4")
+            val_input = ui.number(
+                label="自由流通股 (单位：亿)",
+                value=current_val if current_val > 0 else None,
+                format="%.2f",
+                placeholder="请输入自由流通股本"
+            ).props("outlined dense").classes("w-full mb-4")
+
+            async def _save():
+                new_val = val_input.value
+                if not new_val or new_val <= 0:
+                    ui.notify("请输入有效的数值", type="negative", position="left")
+                    return
+
+                self.service.update_float_shares(stock_name, new_val)
+                ui.notify(f"{stock_name} 流通股配置成功", type="positive", position="left")
+                dialog.close()
+                await self.refresh_chip_dist_plot() # 保存后自动触发重绘
+
+            with ui.row().classes("justify-end gap-3 mt-4"):
+                ui.button("取消", on_click=dialog.close).props("flat")
+                ui.button("保存", on_click=_save, color="blue-5")
+        dialog.open()
 
     async def refresh_all_data(self):
         await self.refresh_match_stock_list()

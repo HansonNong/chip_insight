@@ -195,6 +195,7 @@ class SummaryUI:
                 columns=[
                     {"name": "code", "label": "股票代码", "field": "code", "sortable": True},
                     {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                    {"name": "float_shares", "label": "自由流通(亿)", "field": "float_shares", "sortable": True},
                     {"name": "total_buy", "label": "总买入", "field": "total_buy", "sortable": True},
                     {"name": "total_sell", "label": "总卖出", "field": "total_sell", "sortable": True},
                     {"name": "hold_volume", "label": "当前持仓", "field": "hold_volume", "sortable": True},
