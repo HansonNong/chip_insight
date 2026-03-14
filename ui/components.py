@@ -193,9 +193,9 @@ class SummaryUI:
                         
             self.chip_summary_table = ui.table(
                 columns=[
-                    {"name": "code", "label": "股票代码", "field": "code", "sortable": True},
+                    {"name": "code", "label": "股票代码", "field": "code", "sortable": True, "align": "center"},
                     {"name": "name", "label": "股票", "field": "name", "sortable": True},
-                    {"name": "float_shares", "label": "自由流通(亿)", "field": "float_shares", "sortable": True},
+                    {"name": "float_shares", "label": "自由流通(亿)", "field": "float_shares", "sortable": True, "align": "center"}, 
                     {"name": "total_buy", "label": "总买入", "field": "total_buy", "sortable": True},
                     {"name": "total_sell", "label": "总卖出", "field": "total_sell", "sortable": True},
                     {"name": "hold_volume", "label": "当前持仓", "field": "hold_volume", "sortable": True},
@@ -205,11 +205,16 @@ class SummaryUI:
             ).classes("h-[260px]")
 
             self.chip_summary_table.add_slot("body-cell-code", '''
-                <q-td :props="props">
-                    <div class="cursor-pointer text-blue-600 hover:underline px-1"
-                        @click="$emit('rowClick', props)">
-                        {{ props.value || '点击填写' }}
-                    </div>
+                <q-td :props="props" @click.stop="$parent.$emit('edit_code', props.row)" class="cursor-pointer text-blue-500 font-medium">
+                    {{ props.value || '点此设置' }}
+                    <q-icon name="edit" size="xs" class="ml-1 text-grey-4" />
+                </q-td>
+            ''')
+
+            self.chip_summary_table.add_slot("body-cell-float_shares", '''
+                <q-td :props="props" @click.stop="$parent.$emit('edit_float', props.row)" class="cursor-pointer text-blue-500 font-medium">
+                    {{ props.value > 0 ? props.value : '点此设置' }}
+                    <q-icon name="edit" size="xs" class="ml-1 text-grey-4" />
                 </q-td>
             ''')
 
@@ -220,12 +225,6 @@ class SummaryUI:
                     </q-badge>
                 </q-td>
             ''')
-
-            self.chip_summary_table.on('rowClick', self._handle_click)
-
-    async def _handle_click(self, e):
-        row = e.args[1]
-        await self.on_code_edit(row)
 
     def get_search_keyword(self):
         return self.chip_summary_search.value.strip() if (self.chip_summary_search and self.chip_summary_search.value) else ""

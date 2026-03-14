@@ -58,6 +58,8 @@ class ChipInSightApp:
                 on_code_edit=self._edit_stock_code, 
                 on_auto_fill=self._handle_auto_fill
             )
+            self.summary_ui.chip_summary_table.on("edit_code", lambda e: self._edit_stock_code(e.args))
+            self.summary_ui.chip_summary_table.on("edit_float", lambda e: self._edit_float_shares(e.args))
             self.trade_table_ui = TradeTableUI(on_search=self.refresh_table)
 
         self.buy_dialog = BuyMatchDialogUI(on_match=self._do_match)
@@ -379,32 +381,39 @@ class ChipInSightApp:
             ui.notify("未发现可匹配的代码，请手动填写", type="warning", position="left")
 
     async def _edit_float_shares(self, row):
-        stock_name = row["name"]
-        current_val = row.get("float_shares", 0)
+        stock_name = row.get("name") if isinstance(row, dict) else row["name"]
+        current_val = row.get("float_shares", 0) if isinstance(row, dict) else row.get("float_shares", 0)
 
-        with ui.dialog() as dialog, ui.card().classes("p-6 w-[400px]"):
-            ui.label(f"配置自由流通股：{stock_name}").classes("text-lg font-bold mb-4")
+        with ui.dialog() as dialog, ui.card().classes("p-6 w-[350px]"):
+            ui.label(f"编辑自由流通股").classes("text-lg font-bold mb-2")
+            ui.label(f"股票名称: {stock_name}").classes("text-grey-7 mb-4")
+            
             val_input = ui.number(
-                label="自由流通股 (单位：亿)",
+                label="自由流通股本 (单位：亿)",
                 value=current_val if current_val > 0 else None,
                 format="%.2f",
-                placeholder="请输入自由流通股本"
-            ).props("outlined dense").classes("w-full mb-4")
+                precision=2
+            ).props("outlined dense autofocus").classes("w-full mb-4")
 
             async def _save():
                 new_val = val_input.value
-                if not new_val or new_val <= 0:
-                    ui.notify("请输入有效的数值", type="negative", position="left")
+                if new_val is None or new_val <= 0:
+                    ui.notify("请输入大于 0 的数值", type="negative", position="left")
                     return
 
-                self.service.update_float_shares(stock_name, new_val)
-                ui.notify(f"{stock_name} 流通股配置成功", type="positive", position="left")
-                dialog.close()
-                await self.refresh_chip_dist_plot() # 保存后自动触发重绘
+                if self.service.update_float_shares(stock_name, new_val):
+                    ui.notify(f"{stock_name} 自由流通股已更新为 {new_val} 亿", type="positive", position="left")
+                    dialog.close()
+                    await self.refresh_chip_summary()
+                    if self.current_selected_stock == stock_name:
+                        await self.refresh_chip_dist_plot()
+                else:
+                    ui.notify("数据库更新失败", type="negative", position="left")
 
-            with ui.row().classes("justify-end gap-3 mt-4"):
+            with ui.row().classes("justify-end gap-3 mt-4 w-full"):
                 ui.button("取消", on_click=dialog.close).props("flat")
-                ui.button("保存", on_click=_save, color="blue-5")
+                ui.button("保存修改", on_click=_save, color="blue-6")
+        
         dialog.open()
 
     async def refresh_all_data(self):
