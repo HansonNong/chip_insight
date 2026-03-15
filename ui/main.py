@@ -43,8 +43,6 @@ class ChipInSightApp:
         self.trade_table_ui: TradeTableUI | None = None
         self.buy_dialog: BuyMatchDialogUI | None = None
 
-        self._build_ui()
-        ui.timer(0.5, self.refresh_all_data, once=True)
 
     def _build_ui(self) -> None:
         """Construct the UI layout and bind events."""
@@ -97,7 +95,7 @@ class ChipInSightApp:
 
     async def refresh_match_stock_list(self) -> None:
         """Update available stocks for matching."""
-        df = self.service.get_chip_summary("")
+        df = await asyncio.to_thread(self.service.get_chip_summary, "")
         df = df[df["hold_volume"] != 0].drop_duplicates("name")
         names: list[str] = sorted(df["name"].tolist()) if not df.empty else []
 
@@ -123,7 +121,9 @@ class ChipInSightApp:
         if not self.current_selected_stock or not self.sell_match_ui:
             return
 
-        df = self.service.get_sell_records_with_match(self.current_selected_stock)
+        df = await asyncio.to_thread(
+            self.service.get_sell_records_with_match, self.current_selected_stock
+        )
         rows: list[dict[str, Any]] = []
 
         if not df.empty:
@@ -225,7 +225,7 @@ class ChipInSightApp:
 
     async def refresh_chip_stock_list(self) -> None:
         """Update stock list in chip view."""
-        df = self.service.get_chip_summary("")
+        df = await asyncio.to_thread(self.service.get_chip_summary, "")
         df = df[df["hold_volume"] != 0].drop_duplicates("name")
         names: list[str] = sorted(df["name"].tolist()) if not df.empty else []
 
@@ -329,7 +329,9 @@ class ChipInSightApp:
         if not self.current_selected_stock or not self.chip_price_ui:
             return
 
-        df = self.service.get_chip_price(self.current_selected_stock)
+        df = await asyncio.to_thread(
+            self.service.get_chip_price, self.current_selected_stock
+        )
         rows: list[dict[str, Any]] = []
         if not df.empty:
             df = df.astype({"buy_volume": int, "sell_volume": int})
@@ -343,23 +345,13 @@ class ChipInSightApp:
         if not self.summary_ui:
             return
         keyword = self.summary_ui.get_search_keyword()
-        df = self.service.get_chip_summary(keyword)
+        df = await asyncio.to_thread(self.service.get_enriched_chip_summary, keyword)
         rows: list[dict[str, Any]] = []
         if not df.empty:
             df = df.astype({"total_buy": int, "total_sell": int, "hold_volume": int})
             df["summary_key"] = df["name"]
             if "code" not in df.columns:
                 df["code"] = ""
-            
-            net_profits = []
-            for name in df["name"]:
-                sell_df = self.service.get_sell_records_with_match(name)
-                stock_profit = 0.0
-                if not sell_df.empty and "match_status" in sell_df.columns and "profit" in sell_df.columns:
-                    matched = sell_df[sell_df["match_status"] == "已匹配"]
-                    stock_profit = matched["profit"].sum()
-                net_profits.append(round(stock_profit, 2))
-            df["net_profit"] = net_profits
 
             rows = cast(list[dict[str, Any]], df.to_dict("records"))
         self.summary_ui.set_rows(rows)
@@ -406,7 +398,7 @@ class ChipInSightApp:
             return
 
         keyword = self.trade_table_ui.get_search_keyword()
-        df = self.service.get_all_trades()
+        df = await asyncio.to_thread(self.service.get_all_trades)
         if keyword:
             df = df[df["name"].str.contains(keyword, na=False)]
         if "time" in df.columns:
@@ -569,9 +561,20 @@ class ChipInSightApp:
         await self.refresh_chip_price()
         await self.refresh_chip_summary()
         await self.refresh_table()
+        # 刷新网页后恢复显示筹码分布图
+        if self.current_selected_stock:
+            await self.refresh_chip_dist_plot()
 
     def run(self) -> None:
         """Start the application."""
+        @ui.page('/')
+        async def index_page() -> None:
+            self._build_ui()
+            # 释放控制权给事件循环，确保空壳页面瞬间发送给手机浏览器
+            await asyncio.sleep(0.1)
+            # 页面加载后，再异步请求并填充各项数据
+            await self.refresh_all_data()
+
         ui.run(
             title=Config.APP_TITLE,
             host=Config.HOST,

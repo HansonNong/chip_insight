@@ -85,6 +85,23 @@ class TradeService:
         """Get summary of stock holdings filtered by keyword."""
         return cast(pd.DataFrame, self.db.get_chip_summary(keyword))
 
+    def get_enriched_chip_summary(self, keyword: str = "") -> pd.DataFrame:
+        """Get chip summary and enrich it with calculated net profit for each stock."""
+        df = self.get_chip_summary(keyword)
+        if df.empty:
+            return df
+
+        net_profits = []
+        for name in df["name"]:
+            sell_df = self.get_sell_records_with_match(name)
+            stock_profit = 0.0
+            if not sell_df.empty and "match_status" in sell_df.columns and "profit" in sell_df.columns:
+                matched = sell_df[sell_df["match_status"] == "已匹配"]
+                stock_profit = matched["profit"].sum()
+            net_profits.append(round(stock_profit, 2))
+        df["net_profit"] = net_profits
+        return df
+
     def get_chip_price(self, stock_name: str) -> pd.DataFrame:
         """Fetch price distribution for a specific stock."""
         return cast(pd.DataFrame, self.db.get_chip_price(stock_name))
