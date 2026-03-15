@@ -211,6 +211,8 @@ class ChipInSightApp:
                 self.db.delete_specific_match(self.current_matching_sell_id, buy_id)
                 ui.notify("已撤销匹配", color='orange', position="left")
             else:
+                # 切换匹配：先移除当前卖出记录的所有已有匹配，再与新选中的筹码建立匹配
+                self.service.remove_match(self.current_matching_sell_id)
                 self.service.create_match(self.current_matching_sell_id, buy_id)
                 ui.notify("匹配成功", color='positive', position="left")
 
