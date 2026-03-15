@@ -211,7 +211,6 @@ class ChipInSightApp:
                 self.db.delete_specific_match(self.current_matching_sell_id, buy_id)
                 ui.notify("已撤销匹配", color='orange', position="left")
             else:
-                # 切换匹配：先移除当前卖出记录的所有已有匹配，再与新选中的筹码建立匹配
                 self.service.remove_match(self.current_matching_sell_id)
                 self.service.create_match(self.current_matching_sell_id, buy_id)
                 ui.notify("匹配成功", color='positive', position="left")
@@ -219,6 +218,7 @@ class ChipInSightApp:
             await self._load_available_buys()
             await self.refresh_sell_match_table()
             await self.refresh_chip_price()
+            await self.refresh_chip_summary()
 
         except Exception as err:
             print(f"CRITICAL ERROR: {err}")
@@ -350,6 +350,17 @@ class ChipInSightApp:
             df["summary_key"] = df["name"]
             if "code" not in df.columns:
                 df["code"] = ""
+            
+            net_profits = []
+            for name in df["name"]:
+                sell_df = self.service.get_sell_records_with_match(name)
+                stock_profit = 0.0
+                if not sell_df.empty and "match_status" in sell_df.columns and "profit" in sell_df.columns:
+                    matched = sell_df[sell_df["match_status"] == "已匹配"]
+                    stock_profit = matched["profit"].sum()
+                net_profits.append(round(stock_profit, 2))
+            df["net_profit"] = net_profits
+
             rows = cast(list[dict[str, Any]], df.to_dict("records"))
         self.summary_ui.set_rows(rows)
 
