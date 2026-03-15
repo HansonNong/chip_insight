@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, cast
 
 import plotly.graph_objects as go
-from nicegui import events, ui
+from nicegui import Client, events, ui
 
 from core.fetch_data import get_stock_data
 from core.parse_input import TradeImageParser
@@ -567,9 +567,9 @@ class ChipInSightApp:
     def run(self) -> None:
         """Start the application."""
         @ui.page('/')
-        async def index_page() -> None:
+        async def index_page(client: Client) -> None:
             self._build_ui()
-            await asyncio.sleep(0.1)
+            await client.connected()
 
             self.logger.info("数据加载中...")
             await asyncio.sleep(0.01)
