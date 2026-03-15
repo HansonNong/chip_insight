@@ -64,7 +64,7 @@ class ChipInSightApp:
             "min-h-[80vh] sm:max-w-6xl"
         )
         with ui.column().classes(container_style):
-            self.upload_card = UploadCardUI(on_upload=self._parse_trade_image)
+            self.upload_card = UploadCardUI(on_multi_upload=self._parse_trade_images_batch)
 
             if self.upload_card and self.upload_card.tip_label:
                 self.logger.set_tip_label(self.upload_card.tip_label)
@@ -420,26 +420,55 @@ class ChipInSightApp:
         ) if not df.empty else []
         self.trade_table_ui.set_rows(rows)
 
-    async def _parse_trade_image(self, evt: events.UploadEventArguments) -> None:
-        """Process uploaded trade record image."""
-        fname = evt.file.name
-        self.logger.info(f"处理中：{fname}")
-        ui.notify(f"处理中：{fname}", position="left")
-
-        await asyncio.sleep(0.1)
-        img_bytes = await evt.file.read()
-        df = await asyncio.to_thread(self.service.parse_image, img_bytes)
-
-        if df.empty:
-            ui.notify(f"无法识别：{fname}", type="negative", position="left")
+    async def _parse_trade_images_batch(self, evt: events.MultiUploadEventArguments) -> None:
+        """Process a batch of uploaded trade record images with progress tracking."""
+        total_files = len(evt.files)
+        if not total_files:
             return
 
-        added = await asyncio.to_thread(self.service.save_trades, df)
-        if added > 0:
-            ui.notify(f"完成：新增{added}条记录", type="positive", position="left")
+        total_added = 0
+        any_success = False
+
+        for i, file_obj in enumerate(evt.files):
+            fname = file_obj.name
+            progress = f"({i + 1}/{total_files})"
+            self.logger.info(f"处理中 {progress}：{fname}")
+
+            # Allow UI to update before blocking operation
+            await asyncio.sleep(0.01)
+
+            try:
+                img_bytes = await file_obj.read()
+                df = await asyncio.to_thread(self.service.parse_image, img_bytes)
+
+                if df.empty:
+                    self.logger.error(f"无法识别 {progress}：{fname}")
+                    ui.notify(f"无法识别：{fname}", type="negative", position="left")
+                    continue
+
+                added = await asyncio.to_thread(self.service.save_trades, df)
+                if added > 0:
+                    total_added += added
+                    any_success = True
+                    self.logger.success(f"完成 {progress}：{fname} 新增{added}条记录")
+                    ui.notify(f"完成：{fname} 新增{added}条记录", type="positive", position="left")
+                else:
+                    self.logger.warn(f"跳过重复 {progress}：{fname}")
+                    ui.notify(f"跳过重复：{fname}", type="warning", position="left")
+
+            except Exception as e:
+                self.logger.error(f"处理失败 {progress}：{fname}，错误：{e}")
+                ui.notify(f"处理失败：{fname}", type="negative", position="left")
+            finally:
+                if hasattr(file_obj, 'close'):
+                    file_obj.close() # type: ignore
+
+        if any_success:
+            self.logger.success(f"批量处理完成，共新增 {total_added} 条记录。")
             await self.refresh_all_data()
         else:
-            ui.notify(f"跳过重复：{fname}", type="warning", position="left")
+            self.logger.info("批量处理完成，无新记录添加。")
+
         if self.upload_card:
             self.upload_card.reset()
 

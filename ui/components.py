@@ -14,19 +14,19 @@ class HeaderUI:
                 ui.button("备份并重置", icon="history", on_click=on_clear).props("flat color=red-300")
 
 class UploadCardUI:
-    def __init__(self, on_upload: Callable[..., Any]) -> None:
+    def __init__(self, on_multi_upload: Callable[..., Any]) -> None:
         """Card component for uploading trade screenshots."""
         self.uploader: ui.upload | None = None
         self.tip_label: ui.label | None = None
-        self._build(on_upload)
+        self._build(on_multi_upload)
 
-    def _build(self, on_upload: Callable[..., Any]) -> None:
+    def _build(self, on_multi_upload: Callable[..., Any]) -> None:
         with ui.card().classes("p-2 sm:p-6"):
             ui.label("同步记录").classes("text-lg font-bold mb-2")
             with ui.row().classes("items-start gap-6"):
                 self.uploader = ui.upload(
                     label="上传股票交易截图 (支持批量)",
-                    on_upload=on_upload,
+                    on_multi_upload=on_multi_upload,
                     multiple=True,
                     auto_upload=True
                 ).classes("flex-grow h-32")
