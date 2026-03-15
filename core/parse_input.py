@@ -7,7 +7,8 @@ from rapidocr_onnxruntime import RapidOCR
 from datetime import date
 
 class TradeImageParser:
-    def __init__(self, y_threshold: int = 45):
+    def __init__(self, y_threshold: int = 45) -> None:
+        """Initialize OCR engine and regex patterns."""
         self.engine = RapidOCR()
         self.re_action = re.compile(r'买入|卖出')
         self.re_date_time = re.compile(r'\d{8,14}')
@@ -15,29 +16,30 @@ class TradeImageParser:
         self.y_threshold = y_threshold
 
     def _get_rows(self, img_data: np.ndarray) -> list[list[dict[str, Any]]]:
+        """Group OCR detected text blocks into rows based on Y coordinates."""
         result, _ = self.engine(img_data)
         if not result:
             return []
 
-        items = []
+        items: list[dict[str, Any]] = []
         for line in result:
             coords = cast(list[list[float]], line[0])
             text = str(line[1]).strip()
             y_coords = [float(p[1]) for p in coords]
             x_coords = [float(p[0]) for p in coords]
+            
             items.append({
-                'x': sum(x_coords)/4.0, 
-                'y': sum(y_coords)/4.0, 
+                'x': sum(x_coords) / 4.0, 
+                'y': sum(y_coords) / 4.0, 
                 'text': text
             })
         
         if not items:
             return []
 
-        # Group items into rows based on Y coordinate threshold
         items.sort(key=lambda x: x['y'])
-        rows_data = []
-        current_row = [items[0]]
+        rows_data: list[list[dict[str, Any]]] = []
+        current_row: list[dict[str, Any]] = [items[0]]
 
         for i in range(1, len(items)):
             if abs(items[i]['y'] - current_row[-1]['y']) <= self.y_threshold:
@@ -49,10 +51,13 @@ class TradeImageParser:
 
         current_row.sort(key=lambda x: x['x'])
         rows_data.append(current_row)
+        
         return rows_data
 
     def parse(self, img_input: str | bytes) -> pd.DataFrame:
-        img_data = None
+        """Parse trade information from image path or bytes into a DataFrame."""
+        img_data: np.ndarray | None = None
+        
         if isinstance(img_input, bytes):
             nparr = np.frombuffer(img_input, np.uint8)
             img_data = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -64,8 +69,9 @@ class TradeImageParser:
 
         img_width = img_data.shape[1]
         rows_data = self._get_rows(img_data)
-        records = []
-        buffer = {}
+        
+        records: list[dict[str, Any]] = []
+        buffer: dict[str, Any] = {}
 
         for row in rows_data:
             row_texts = [it['text'] for it in row]
@@ -73,11 +79,11 @@ class TradeImageParser:
             action_match = self.re_action.search(row_str)
 
             if action_match:
-                # Save previous record if valid
+                # Commit previous valid record
                 if 'name' in buffer and (buffer.get('price', 0) > 0 or buffer.get('volume', 0) > 0):
                     records.append(buffer.copy())
                 
-                # Identify stock name: Non-numeric text in the left half, length >= 2
+                # Identify stock name from left side of the image
                 stock_name = "Unknown"
                 for it in row:
                     x_ratio = it['x'] / img_width
@@ -116,18 +122,18 @@ class TradeImageParser:
                             buffer['amount'] = val
                     elif clean_num.isdigit():
                         val_int = int(clean_num)
-                        # Avoid matching 6-digit time as volume
+                        # Distinguish between volume and HHMMSS time
                         if buffer.get('volume') == 0 and not self.re_time_only.fullmatch(clean_num):
                             buffer['volume'] = val_int
                         elif self.re_time_only.fullmatch(clean_num) and buffer.get('time') is None:
                             today = date.today().strftime("%Y%m%d")
                             buffer['time'] = today + clean_num
 
-        # Push the last record
+        # Add last remaining record
         if 'name' in buffer and (buffer.get('price', 0) > 0 or buffer.get('volume', 0) > 0):
             records.append(buffer)
 
-        # Post-processing with Pandas
+        # DataFrame post-processing and cleanup
         df = pd.DataFrame(records)
         if not df.empty:
             if 'time' in df.columns:
@@ -138,7 +144,7 @@ class TradeImageParser:
             df['volume'] = df['volume'].fillna(0).astype(int)
             df['amount'] = df['amount'].fillna(0.0)
             
-            # Calibration: handle OCR missed amount
+            # Fill missing amounts using price * volume
             mask = (df['amount'] == 0.0) & (df['price'] > 0) & (df['volume'] > 0)
             df.loc[mask, 'amount'] = df['price'] * df['volume']
             
@@ -150,9 +156,11 @@ if __name__ == "__main__":
     
     try:
         result_df = parser.parse(test_image_path)
+        
         if not result_df.empty:
             print(result_df.to_string(index=False))
         else:
             print("No records found.")
+            
     except Exception as e:
         print(f"Error: {e}")

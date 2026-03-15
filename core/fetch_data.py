@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+from collections.abc import Callable
+from typing import Any
 import akshare as ak
 import pandas as pd
 import threading
@@ -7,11 +9,13 @@ import re
 import os
 
 
-def timeout_handler(seconds):
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+def timeout_handler(seconds: int) -> Callable:
+    """Decorator to enforce timeout on function execution."""
+    def decorator(func: Callable) -> Callable:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             res = [Exception(f"Function {func.__name__} timed out after {seconds}s")]
-            def target():
+
+            def target() -> None:
                 try:
                     res[0] = func(*args, **kwargs)
                 except Exception as e:
@@ -25,24 +29,33 @@ def timeout_handler(seconds):
             if thread.is_alive():
                 print(f"警告: {func.__name__} 执行超时！")
                 return None, "" 
+                
             if isinstance(res[0], Exception):
                 raise res[0]
             return res[0]
+            
         return wrapper
     return decorator
 
 
 @timeout_handler(seconds=10)
-def get_stock_data(symbol: str, period: int = 60, manual_float_shares: float = 0) -> tuple[pd.DataFrame | None, str]:
+def get_stock_data(
+    symbol: str, 
+    period: int = 60, 
+    manual_float_shares: float = 0
+) -> tuple[pd.DataFrame | None, str]:
+    """Fetch market data and calculate turnover rates."""
     pure_symbol = re.sub(r"[^0-9]", "", symbol)
     if not pure_symbol:
         return None, ""
     
+    # Handle market prefix
     if symbol.startswith(("sh", "sz")):
         code = symbol
     else:
         code = f"sh{pure_symbol}" if pure_symbol.startswith("6") else f"sz{pure_symbol}"
 
+    # Get float shares for turnover calculation
     if manual_float_shares > 0:
         float_shares = manual_float_shares * 100000000 
     else:
@@ -53,6 +66,7 @@ def get_stock_data(symbol: str, period: int = 60, manual_float_shares: float = 0
             print(f"获取流通股失败: {e}")
             return None, code
 
+    # Fetch minute-level K-line data
     try:
         df = ak.stock_zh_a_minute(symbol=code, period=str(period), adjust="qfq")
     except Exception as e:
@@ -62,59 +76,60 @@ def get_stock_data(symbol: str, period: int = 60, manual_float_shares: float = 0
     if df is None or df.empty:
         return None, code
 
-    df = df.rename(columns={"datetime": "day"})  # 适配visualize_cost的字段名
+    # Data transformation and cleaning
+    df = df.rename(columns={"datetime": "day"})
     df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
     df['close'] = pd.to_numeric(df['close'], errors='coerce')
-    df['turnover_rate'] = df['volume'] / float_shares  # 换手率=成交量/流通股
+    
+    # Calculate turnover rate
+    df['turnover_rate'] = df['volume'] / float_shares
     df = df.drop_duplicates(keep="last").sort_index().reset_index(drop=True)
     
     return df, code
 
 
-# 在 fetch_data.py 中添加以下逻辑
-def get_all_a_shares_map(cache_dir: str = "./db") -> dict:
-    """
-    获取全量A股映射表 {名称: 代码}，每天更新一次缓存
-    """
+def get_all_a_shares_map(cache_dir: str = "./db") -> dict[str, str]:
+    """Get mapping of stock names to codes with local cache."""
     cache_path = os.path.join(cache_dir, "stock_mapping_cache.json")
     
-    # 检查缓存是否有效 (存在且是24小时内更新)
+    # Check cache validity
     if os.path.exists(cache_path):
         mtime = datetime.fromtimestamp(os.path.getmtime(cache_path))
         if datetime.now() - mtime < timedelta(days=1):
             with open(cache_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
 
-    # 缓存失效或不存在，从 akshare 拉取
+    # Refresh data from akshare
     try:
         print("正在从 akshare 更新全量股票映射表...")
         df = ak.stock_info_a_code_name()
-        # 转换为字典，key 为名称，value 为代码
         mapping = dict(zip(df['name'], df['code']))
         
-        # 写入缓存
         os.makedirs(cache_dir, exist_ok=True)
         with open(cache_path, 'w', encoding='utf-8') as f:
             json.dump(mapping, f, ensure_ascii=False, indent=2)
+            
         return mapping
     except Exception as e:
         print(f"更新映射表失败: {e}")
-
         return {}
 
     
 if __name__ == "__main__":
     my_symbol = "603667" 
-    target_dir="./cache"
-    period=60
-    import os
+    target_dir = "./cache"
+    period = 60
 
     df, code = get_stock_data(my_symbol, period=period)
 
-    filename = f"{code}_{period}m_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    save_path = os.path.join(target_dir, filename)
-
     if df is not None:
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
+            
+        timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{code}_{period}m_{timestamp}.xlsx"
+        save_path = os.path.join(target_dir, filename)
+        
         df.to_excel(save_path, index=False)
         print(f"Data saved successfully: {save_path}")
     else:
