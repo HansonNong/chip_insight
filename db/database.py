@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 import pandas as pd
 import sqlite3
 import shutil
@@ -6,7 +7,8 @@ import os
 import gc
 
 class TradeDatabase:
-    def __init__(self, db_path: str = "db/data/chip_insight.db"):
+    def __init__(self, db_path: str = "db/data/chip_insight.db") -> None:
+        """Initialize database connection and ensure directory exists."""
         self.db_dir = os.path.dirname(db_path)
         if self.db_dir:
             os.makedirs(self.db_dir, exist_ok=True)
@@ -14,6 +16,7 @@ class TradeDatabase:
         self._init_db()
 
     def _init_db(self) -> None:
+        """Create tables for trades and matches if they do not exist."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS trades (
@@ -33,18 +36,18 @@ class TradeDatabase:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS trade_matches (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sell_id INTEGER,          -- 卖出记录ID
-                    buy_id INTEGER,           -- 对应的买入记录ID
-                    match_volume INTEGER,     -- 本次匹配数量
+                    sell_id INTEGER,
+                    buy_id INTEGER,
+                    match_volume INTEGER,
                     matched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (sell_id) REFERENCES trades(id),
                     FOREIGN KEY (buy_id) REFERENCES trades(id)
                 )
             ''')
-            
             conn.commit()
 
     def save_trades(self, df: pd.DataFrame) -> int:
+        """Save trade records from DataFrame into the database."""
         if df.empty: 
             return 0
         
@@ -63,7 +66,7 @@ class TradeDatabase:
                     ''', (
                         str(trade_time),
                         str(row.get('name', '未知')),
-                        str(row.get('code', '')),  # 股票代码
+                        str(row.get('code', '')),
                         str(row.get('action', '未知')),
                         float(row.get('price', 0.0)),
                         int(row.get('volume', 0)),
@@ -77,6 +80,7 @@ class TradeDatabase:
         return new_rows
 
     def get_all_trades(self) -> pd.DataFrame:
+        """Fetch all trade records ordered by time descending."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 return pd.read_sql_query(
@@ -87,6 +91,7 @@ class TradeDatabase:
             return pd.DataFrame()
 
     def clear_all_trades(self) -> bool:
+        """Backup current database and reset all tables."""
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = f"{self.db_path}.{timestamp}.bak"
@@ -103,6 +108,7 @@ class TradeDatabase:
             return False
 
     def get_chip_price(self, stock_name: str | None = None) -> pd.DataFrame:
+        """Query buy/sell volumes grouped by price for specific stock."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 query = '''
@@ -113,24 +119,24 @@ class TradeDatabase:
                         SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) AS sell_volume
                     FROM trades 
                 '''
-                params = []
+                params: list[Any] = []
                 if stock_name and stock_name.strip():
                     query += " WHERE name LIKE ?"
                     params.append(f"%{stock_name.strip()}%")
                 query += " GROUP BY name, price ORDER BY name, price"
-                df = pd.read_sql_query(query, conn, params=params)
-                return df
+                return pd.read_sql_query(query, conn, params=params)
         except Exception as e:
             print(f"[ERROR] 筹码价格查询失败: {e}")
             return pd.DataFrame()
 
     def get_chip_summary(self, stock_name: str | None = None) -> pd.DataFrame:
+        """Get summarized holding info and handle schema migrations."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("PRAGMA table_info(trades)")
                 columns = [col[1] for col in cursor.fetchall()]
-                # 动态增加字段
+                
                 if "code" not in columns:
                     cursor.execute("ALTER TABLE trades ADD COLUMN code TEXT DEFAULT ''")
                 if "float_shares" not in columns:
@@ -141,27 +147,26 @@ class TradeDatabase:
                     SELECT 
                         name,
                         COALESCE(MAX(code), '') as code,
-                        COALESCE(MAX(float_shares), 0) as float_shares, -- 增加字段查询
+                        COALESCE(MAX(float_shares), 0) as float_shares,
                         SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) AS total_buy,
                         SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END) AS total_sell,
                         (SUM(CASE WHEN action = '买入' THEN volume ELSE 0 END) 
                         - SUM(CASE WHEN action = '卖出' THEN volume ELSE 0 END)) AS hold_volume
                     FROM trades
                 '''
-                params = []
+                params: list[Any] = []
                 if stock_name and stock_name.strip():
                     query += " WHERE name LIKE ?"
                     params.append(f"%{stock_name.strip()}%")
                 query += " GROUP BY name ORDER BY name"
 
-                df = pd.read_sql_query(query, conn, params=params)
-                return df
-            
+                return pd.read_sql_query(query, conn, params=params)
         except Exception as e:
             print(f"[ERROR] 筹码统计查询失败: {e}")
             return pd.DataFrame(columns=["name", "code", "total_buy", "total_sell", "hold_volume"])
 
-    def remove_sell_buy_match(self, sell_id):
+    def remove_sell_buy_match(self, sell_id: int | str) -> bool:
+        """Remove all match relations for a specific sell ID."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute('DELETE FROM trade_matches WHERE sell_id = ?', (int(sell_id),))
@@ -171,9 +176,13 @@ class TradeDatabase:
             print(f"[ERROR] 解绑失败: {e}")
             return False
 
-    def get_available_buys_for_match(self, stock_name, current_sell_id=None):
+    def get_available_buys_for_match(self, stock_name: str, current_sell_id: int | str | None = None) -> pd.DataFrame:
+        """Fetch buy records that are available for matching."""
         try:
             with sqlite3.connect(self.db_path) as conn:
+                # This satisfies Pylance's requirement for non-None params
+                query_params = (current_sell_id or 0, current_sell_id or 0, stock_name)
+                
                 sql = '''
                     WITH other_matches AS (
                         SELECT buy_id, SUM(match_volume) AS vol
@@ -202,14 +211,13 @@ class TradeDatabase:
                       AND ( (t.volume - IFNULL(om.vol, 0)) > 0 OR IFNULL(cm.vol, 0) > 0 )
                     ORDER BY t.time ASC
                 '''
-                df = pd.read_sql_query(sql, conn, params=(current_sell_id, current_sell_id, stock_name))
-                return df
-            
+                return pd.read_sql_query(sql, conn, params=query_params)
         except Exception as e:
             print(f"[ERROR] 可匹配查询失败: {e}")
             return pd.DataFrame()
 
-    def get_sell_records_with_match(self, stock_name):
+    def get_sell_records_with_match(self, stock_name: str) -> pd.DataFrame:
+        """Analyze sell records and calculate profit based on matches."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 sql = '''
@@ -254,15 +262,14 @@ class TradeDatabase:
                         df.at[i, 'profit'] = (sp - ap) * vol
                         df.at[i, 'profit_pct'] = (sp - ap) / ap
                 return df
-            
         except Exception as e:
             print(f"[ERROR] 卖出匹配记录查询失败: {e}")
             return pd.DataFrame()
 
-    def create_sell_buy_match(self, sell_id, buy_id):
+    def create_sell_buy_match(self, sell_id: int | str, buy_id: int | str) -> bool:
+        """Create a link between sell and buy records based on volume."""
         try:
-            sell_id = int(sell_id)
-            buy_id = int(buy_id)
+            sid, bid = int(sell_id), int(buy_id)
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
@@ -270,7 +277,7 @@ class TradeDatabase:
                     FROM trades t
                     LEFT JOIN trade_matches tm ON t.id = tm.sell_id
                     WHERE t.id = ?
-                ''', (sell_id,))
+                ''', (sid,))
                 sell_remain = cursor.fetchone()[0] or 0
 
                 cursor.execute('''
@@ -278,26 +285,25 @@ class TradeDatabase:
                     FROM trades t
                     LEFT JOIN trade_matches tm ON t.id = tm.buy_id
                     WHERE t.id = ?
-                ''', (buy_id,))
-                
+                ''', (bid,))
                 buy_remain = cursor.fetchone()[0] or 0
+                
                 match_vol = min(sell_remain, buy_remain)
-
                 if match_vol <= 0:
                     return False
                 
                 cursor.execute('''
                     INSERT INTO trade_matches (sell_id, buy_id, match_volume)
                     VALUES (?, ?, ?)
-                ''', (sell_id, buy_id, match_vol))
+                ''', (sid, bid, match_vol))
                 conn.commit()
                 return True
-            
         except Exception as e:
             print(f"[ERROR] 匹配失败: {e}")
             return False
         
     def update_stock_code(self, stock_name: str, code: str) -> bool:
+        """Update stock code for all trades with same name."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -308,12 +314,12 @@ class TradeDatabase:
                 ''', (code.strip(), stock_name))
                 conn.commit()
                 return cursor.rowcount > 0
-            
         except Exception as e:
             print(f"[ERROR] 更新股票代码失败: {e}")
             return False
         
-    def delete_specific_match(self, sell_id, buy_id):
+    def delete_specific_match(self, sell_id: int | str, buy_id: int | str) -> bool:
+        """Delete a specific match record between sell and buy entries."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
@@ -322,12 +328,12 @@ class TradeDatabase:
                 )
                 conn.commit()
                 return True
-            
         except Exception as e:
             print(f"[ERROR] 撤销特定匹配失败: {e}")
             return False
         
     def update_float_shares(self, stock_name: str, float_shares: float) -> bool:
+        """Update historical float shares for a stock name."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
