@@ -1,10 +1,10 @@
 from nicegui import ui
-from typing import Callable
+from typing import Callable, Any
 import plotly.graph_objects as go
 
-
 class HeaderUI:
-    def __init__(self, on_refresh: Callable, on_clear: Callable):
+    def __init__(self, on_refresh: Callable[..., Any], on_clear: Callable[..., Any]) -> None:
+        """Top navigation header with refresh and database reset controls."""
         with ui.header().classes("items-center justify-between bg-slate-800 p-4"):
             with ui.row().classes("items-center"):
                 ui.icon("auto_graph", size="lg").classes("text-white")
@@ -14,11 +14,13 @@ class HeaderUI:
                 ui.button("备份并重置", icon="history", on_click=on_clear).props("flat color=red-300")
 
 class UploadCardUI:
-    def __init__(self, on_upload: Callable):
+    def __init__(self, on_upload: Callable[..., Any]) -> None:
+        """Card component for uploading trade screenshots."""
         self.uploader: ui.upload | None = None
         self.tip_label: ui.label | None = None
         self._build(on_upload)
-    def _build(self, on_upload):
+
+    def _build(self, on_upload: Callable[..., Any]) -> None:
         with ui.card().classes("p-2 sm:p-6"):
             ui.label("同步记录").classes("text-lg font-bold mb-2")
             with ui.row().classes("items-start gap-6"):
@@ -31,18 +33,22 @@ class UploadCardUI:
                 with ui.column().classes("w-64 p-4 bg-gray-50 rounded"):
                     ui.label("系统状态").classes("text-xs font-bold text-gray-400 uppercase")
                     self.tip_label = ui.label("就绪").classes("text-sm text-gray-600 mt-1")
-    def reset(self):
+
+    def reset(self) -> None:
+        """Reset the uploader state."""
         if self.uploader:
             self.uploader.reset()
 
 class SellMatchUI:
-    def __init__(self, on_stock_switch: Callable, on_row_click: Callable):
+    def __init__(self, on_stock_switch: Callable[..., Any], on_row_click: Callable[..., Any]) -> None:
+        """UI for matching sell orders with historical buy orders to calculate profit."""
         self.match_stock_list: ui.list | None = None
         self.sell_match_table: ui.table | None = None
         self.on_stock_switch = on_stock_switch
         self.on_row_click = on_row_click
         self._build()
-    def _build(self):
+
+    def _build(self) -> None:
         with ui.card().classes("p-2 sm:p-6"):
             ui.label("卖出筹码匹配").classes("text-xl font-bold mb-4")
             with ui.row().classes("gap-4"):
@@ -63,6 +69,8 @@ class SellMatchUI:
                         rows=[],
                         row_key="sell_id"
                     ).classes("h-[320px]")
+
+                    # Vue slots for custom cell rendering
                     self.sell_match_table.add_slot("body-cell-profit", '''
                         <q-td :props="props">
                             <div v-if="props.row.status === '未匹配'" class="text-gray-600">
@@ -94,33 +102,34 @@ class SellMatchUI:
                         </q-td>
                     ''')
                     self.sell_match_table.on("rowClick", self.on_row_click)
-    def set_rows(self, rows):
+
+    def set_rows(self, rows: list[dict[str, Any]]) -> None:
         if self.sell_match_table:
             self.sell_match_table.rows = rows
-    def clear_stock_list(self):
+
+    def clear_stock_list(self) -> None:
         if self.match_stock_list:
             self.match_stock_list.clear()
-    def add_stock_item(self, name, callback):
+
+    def add_stock_item(self, name: str, callback: Callable[..., Any]) -> None:
         if self.match_stock_list:
             with self.match_stock_list:
                 ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
 
 class ChipPriceUI:
-    def __init__(self, on_stock_click: Callable):
+    def __init__(self, on_stock_click: Callable[..., Any]) -> None:
+        """UI for visualizing market chip distribution and holding details."""
         self.chip_stock_list: ui.list | None = None
         self.chip_price_table: ui.table | None = None
         self.chip_dist_plot: ui.plotly | None = None 
         self.on_stock_click = on_stock_click
         self._build()
     
-    def _build(self):
+    def _build(self) -> None:
         with ui.card().classes("p-4 sm:p-6 shadow-sm mb-6"):
             ui.label("筹码价格 + 分布").classes("text-xl font-bold mb-4")
-            
             with ui.column().classes("gap-6"):
-                
                 with ui.row().classes("gap-4 flex-col md:flex-row items-stretch"):
-                    
                     with ui.column().classes("md:w-56"):
                         ui.label("持仓股票").classes("text-sm font-semibold mb-2")
                         self.chip_stock_list = ui.list().classes("h-[200px] md:h-[260px] overflow-y-auto border rounded p-2")
@@ -147,28 +156,30 @@ class ChipPriceUI:
                 
                 with ui.column().classes("flex-1"):
                     ui.label("筹码分布对比").classes("text-sm font-semibold mb-2")
+                    # Placeholder figure to avoid empty init errors
                     self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("h-[500px] w-[500px]")
     
-    def set_rows(self, rows):
+    def set_rows(self, rows: list[dict[str, Any]]) -> None:
         if self.chip_price_table:
             self.chip_price_table.rows = rows
     
-    def set_chip_plot(self, figure: go.Figure): 
+    def set_chip_plot(self, figure: go.Figure) -> None: 
         if self.chip_dist_plot:
             self.chip_dist_plot.figure = figure
             self.chip_dist_plot.update()
     
-    def clear_stock_list(self):
+    def clear_stock_list(self) -> None:
         if self.chip_stock_list:
             self.chip_stock_list.clear()
     
-    def add_stock_item(self, name, callback):
+    def add_stock_item(self, name: str, callback: Callable[..., Any]) -> None:
         if self.chip_stock_list:
             with self.chip_stock_list:
                 ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
 
 class SummaryUI:
-    def __init__(self, on_search: Callable, on_code_edit: Callable, on_auto_fill: Callable):
+    def __init__(self, on_search: Callable[..., Any], on_code_edit: Callable[..., Any], on_auto_fill: Callable[..., Any]) -> None:
+        """Dashboard summary of all stock holdings and their configurations."""
         self.chip_summary_search: ui.input | None = None
         self.chip_summary_table: ui.table | None = None
         self.on_search = on_search
@@ -176,7 +187,7 @@ class SummaryUI:
         self.on_auto_fill = on_auto_fill
         self._build()
 
-    def _build(self):
+    def _build(self) -> None:
         with ui.card().classes("p-2 sm:p-6"):
             ui.label("筹码统计").classes("text-xl font-bold mb-4")
             ui.button(
@@ -184,7 +195,6 @@ class SummaryUI:
                 icon="magic_button", 
                 on_click=self.on_auto_fill
             ).props("flat dense color=primary")
-
 
             self.chip_summary_search = ui.input(
                 placeholder="搜索股票...", 
@@ -226,23 +236,24 @@ class SummaryUI:
                 </q-td>
             ''')
 
-    def get_search_keyword(self):
+    def get_search_keyword(self) -> str:
         return self.chip_summary_search.value.strip() if (self.chip_summary_search and self.chip_summary_search.value) else ""
 
-    def set_rows(self, rows):
+    def set_rows(self, rows: list[dict[str, Any]]) -> None:
         if self.chip_summary_table:
             self.chip_summary_table.rows = rows
 
 class TradeTableUI:
-    def __init__(self, on_search: Callable):
+    def __init__(self, on_search: Callable[..., Any]) -> None:
+        """Detailed transaction ledger with search capability."""
         self.search_input: ui.input | None = None
         self.table: ui.table | None = None
         self.on_search = on_search
         self._build()
-    def _build(self):
+
+    def _build(self) -> None:
         with ui.card().classes("p-2 sm:p-6"):
             ui.label("流水明细").classes("text-xl font-bold mb-4")
-            
             self.search_input = ui.input(
                 placeholder="搜索股票...", 
                 on_change=self.on_search
@@ -260,6 +271,7 @@ class TradeTableUI:
                 rows=[],
                 row_key="id"
             ).classes("h-[360px]")
+
             self.table.add_slot("body-cell-action", '''
                 <q-td :props="props">
                     <q-badge :color="props.value === '买入' ? 'red' : (props.value === '卖出' ? 'blue' : 'grey')">
@@ -267,20 +279,23 @@ class TradeTableUI:
                     </q-badge>
                 </q-td>
             ''')
-    def get_search_keyword(self):
+
+    def get_search_keyword(self) -> str:
         return self.search_input.value.strip() if (self.search_input and self.search_input.value) else ""
-    def set_rows(self, rows):
+
+    def set_rows(self, rows: list[dict[str, Any]]) -> None:
         if self.table:
             self.table.rows = rows
 
 class BuyMatchDialogUI:
-    def __init__(self, on_match: Callable):
+    def __init__(self, on_match: Callable[..., Any]) -> None:
+        """Dialog for selecting specific buy records to offset a sell record."""
         self.dialog: ui.dialog | None = None
         self.available_buy_table: ui.table | None = None
         self.on_match = on_match
         self._build()
 
-    def _build(self):
+    def _build(self) -> None:
         self.dialog = ui.dialog()
         with self.dialog, ui.card().classes("w-[750px] p-4"):
             ui.label("选择或撤销匹配的买入筹码").classes("text-lg font-bold mb-2")
@@ -313,17 +328,16 @@ class BuyMatchDialogUI:
                 </q-td>
             ''')
             self.available_buy_table.on("match", self.on_match)
-            
             ui.button("关闭", on_click=self.dialog.close).classes("mt-3 w-full").props("outline")
 
-    def set_rows(self, rows):
+    def set_rows(self, rows: list[dict[str, Any]]) -> None:
         if self.available_buy_table:
             self.available_buy_table.rows = rows
 
-    def open(self):
+    def open(self) -> None:
         if self.dialog:
             self.dialog.open()
             
-    def close(self):
+    def close(self) -> None:
         if self.dialog:
             self.dialog.close()
