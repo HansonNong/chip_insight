@@ -107,9 +107,6 @@ class ChipInSightApp:
                     lambda _, n=name: self._on_stock_switch(n)
                 )
 
-        if names and not self.current_selected_stock:
-            await self._on_stock_switch(names[0])
-
     async def _on_stock_switch(self, stock_name: str) -> None:
         """Switch current stock context."""
         self.current_selected_stock = stock_name
@@ -237,14 +234,11 @@ class ChipInSightApp:
                     lambda _, n=name: self._on_stock_click(n)
                 )
 
-        if names and not self.current_selected_stock:
-            await self._on_stock_click(names[0])
-
     async def _on_stock_click(self, stock_name: str) -> None:
         """Handle stock click in chip distribution."""
         self.current_selected_stock = stock_name
         await self.refresh_chip_price()
-        await self.refresh_chip_dist_plot()
+        await self.refresh_chip_dist_plot(auto_popup=True)
 
     async def get_own_chips(self, stock_name: str) -> list[tuple[float, int]]:
         """Calculate net volume for each price point."""
@@ -258,7 +252,7 @@ class ChipInSightApp:
 
         return list(zip(df["price"].round(2), df["net_volume"]))
 
-    async def refresh_chip_dist_plot(self) -> None:
+    async def refresh_chip_dist_plot(self, auto_popup: bool = False) -> None:
         """Update the plotly distribution chart."""
         if not self.current_selected_stock or not self.chip_price_ui:
             return
@@ -272,20 +266,23 @@ class ChipInSightApp:
         float_shares = float(row.get("float_shares", 0))
 
         if not stock_code:
-            ui.notify(
-                f"{self.current_selected_stock} 未配置代码",
-                type='warning',
-                position="left"
-            )
+            if auto_popup:
+                ui.notify(
+                    f"{self.current_selected_stock} 未配置代码",
+                    type='warning',
+                    position="left"
+                )
+                await self._edit_stock_code(row.to_dict())
             return
 
         if float_shares <= 0:
-            ui.notify(
-                f"请先配置 {self.current_selected_stock} 的自由流通股",
-                type='warning',
-                position="left"
-            )
-            await self._edit_float_shares(row.to_dict())
+            if auto_popup:
+                ui.notify(
+                    f"请先配置 {self.current_selected_stock} 的自由流通股",
+                    type='warning',
+                    position="left"
+                )
+                await self._edit_float_shares(row.to_dict())
             return
 
         ui.notify(
@@ -385,6 +382,8 @@ class ChipInSightApp:
                     position="left"
                 )
                 await self.refresh_chip_summary()
+                if self.current_selected_stock == stock_name:
+                    await self.refresh_chip_dist_plot(auto_popup=True)
                 dialog.close()
 
             with ui.row().classes("justify-end gap-3 mt-4"):
@@ -544,7 +543,7 @@ class ChipInSightApp:
                     dialog.close()
                     await self.refresh_chip_summary()
                     if self.current_selected_stock == stock_name:
-                        await self.refresh_chip_dist_plot()
+                        await self.refresh_chip_dist_plot(auto_popup=True)
                 else:
                     ui.notify("数据库更新失败", type="negative", position="left")
 
@@ -561,19 +560,22 @@ class ChipInSightApp:
         await self.refresh_chip_price()
         await self.refresh_chip_summary()
         await self.refresh_table()
-        # 刷新网页后恢复显示筹码分布图
+
         if self.current_selected_stock:
-            await self.refresh_chip_dist_plot()
+            await self.refresh_chip_dist_plot(auto_popup=False)
 
     def run(self) -> None:
         """Start the application."""
         @ui.page('/')
         async def index_page() -> None:
             self._build_ui()
-            # 释放控制权给事件循环，确保空壳页面瞬间发送给手机浏览器
             await asyncio.sleep(0.1)
-            # 页面加载后，再异步请求并填充各项数据
+
+            self.logger.info("数据加载中...")
+            await asyncio.sleep(0.01)
+
             await self.refresh_all_data()
+            self.logger.success("数据加载完成，系统就绪。")
 
         ui.run(
             title=Config.APP_TITLE,
