@@ -428,13 +428,13 @@ class ChipInSightApp:
 
         await asyncio.sleep(0.1)
         img_bytes = await evt.file.read()
-        df = self.service.parse_image(img_bytes)
+        df = await asyncio.to_thread(self.service.parse_image, img_bytes)
 
         if df.empty:
             ui.notify(f"无法识别：{fname}", type="negative", position="left")
             return
 
-        added = self.service.save_trades(df)
+        added = await asyncio.to_thread(self.service.save_trades, df)
         if added > 0:
             ui.notify(f"完成：新增{added}条记录", type="positive", position="left")
             await self.refresh_all_data()
