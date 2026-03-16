@@ -304,6 +304,7 @@ class TradeTableUI:
 
             self.table = ui.table(
                 columns=[
+                    {"name": "date", "label": "日期", "field": "date", "sortable": True},
                     {"name": "time", "label": "时间", "field": "time", "sortable": True},
                     {"name": "name", "label": "股票", "field": "name", "sortable": True},
                     {"name": "action", "label": "动作", "field": "action", "align": "center"},

@@ -401,7 +401,14 @@ class ChipInSightApp:
         if keyword:
             df = df[df["name"].str.contains(keyword, na=False)]
         if "time" in df.columns:
-            df["time"] = df["time"].astype(str).str.replace("T", " ")
+            if not df.empty:
+                df["time"] = df["time"].astype(str).str.replace("T", " ")
+                parts = df["time"].str.split(n=1, expand=True)
+                df["date"] = parts[0] if 0 in parts.columns else ""
+                df["time"] = parts[1] if 1 in parts.columns else ""
+                df["time"] = df["time"].fillna("")
+            else:
+                df["date"] = ""
         if "code" not in df.columns:
             df["code"] = ""
 
