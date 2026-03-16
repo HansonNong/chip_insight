@@ -400,19 +400,20 @@ class ChipInSightApp:
         self.chip_price_ui.set_chip_plot(fig)
 
     async def refresh_chip_price(self) -> None:
-        """Update the holding price table."""
+        """Update the holding price table to show unmatched holding chips."""
         if not self.current_selected_stock or not self.chip_price_ui:
             return
 
         df = await asyncio.to_thread(
-            self.service.get_chip_price, self.current_selected_stock
+            self.service.get_holding_chips, self.current_selected_stock
         )
         rows: list[dict[str, Any]] = []
         if not df.empty:
-            df = df.astype({"buy_volume": int, "sell_volume": int})
-            df["net_volume"] = df["buy_volume"] - df["sell_volume"]
-            df["price_key"] = df["name"] + "_" + df["price"].astype(str)
-            rows = cast(list[dict[str, Any]], df.to_dict("records"))
+            df = df[df["net_volume"] != 0].copy()
+            if not df.empty:
+                df["name"] = self.current_selected_stock
+                df["price_key"] = df["name"] + "_" + df["price"].astype(str)
+                rows = cast(list[dict[str, Any]], df.to_dict("records"))
         self.chip_price_ui.set_rows(rows)
 
     async def refresh_chip_summary(self) -> None:
