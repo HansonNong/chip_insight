@@ -165,6 +165,36 @@ class TradeDatabase:
             print(f"[ERROR] 筹码统计查询失败: {e}")
             return pd.DataFrame(columns=["name", "code", "total_buy", "total_sell", "hold_volume"])
 
+    def get_holding_chips(self, stock_name: str) -> pd.DataFrame:
+        """
+        Query remaining buy volumes (chips) for a specific stock,
+        accounting for matched sells.
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                query = '''
+                    WITH buy_matched_volumes AS (
+                        SELECT
+                            buy_id,
+                            SUM(match_volume) as total_matched_volume
+                        FROM trade_matches
+                        GROUP BY buy_id
+                    )
+                    SELECT
+                        t.price,
+                        SUM(t.volume - IFNULL(bmv.total_matched_volume, 0)) as net_volume
+                    FROM trades t
+                    LEFT JOIN buy_matched_volumes bmv ON t.id = bmv.buy_id
+                    WHERE t.action = '买入' AND t.name = ?
+                    GROUP BY t.price
+                    HAVING net_volume > 0
+                    ORDER BY t.price;
+                '''
+                return pd.read_sql_query(query, conn, params=(stock_name,))
+        except Exception as e:
+            print(f"[ERROR] 持有筹码查询失败: {e}")
+            return pd.DataFrame()
+
     def remove_sell_buy_match(self, sell_id: int | str) -> bool:
         """Remove all match relations for a specific sell ID."""
         try:

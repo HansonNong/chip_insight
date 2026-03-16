@@ -241,16 +241,12 @@ class ChipInSightApp:
         await self.refresh_chip_dist_plot(auto_popup=True)
 
     async def get_own_chips(self, stock_name: str) -> list[tuple[float, int]]:
-        """Calculate net volume for each price point."""
-        df = self.service.get_chip_price(stock_name)
+        """Calculate net holding volume for each price point, considering matches."""
+        df = await asyncio.to_thread(self.service.get_holding_chips, stock_name)
         if df.empty:
             return []
 
-        df = df.astype({"buy_volume": int, "sell_volume": int})
-        df["net_volume"] = df["buy_volume"] - df["sell_volume"]
-        df = df[df["net_volume"] > 0]
-
-        return list(zip(df["price"].round(2), df["net_volume"]))
+        return list(zip(df["price"].round(2), df["net_volume"].astype(int)))
 
     async def refresh_chip_dist_plot(self, auto_popup: bool = False) -> None:
         """Update the plotly distribution chart."""

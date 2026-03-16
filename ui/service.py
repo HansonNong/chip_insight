@@ -102,6 +102,10 @@ class TradeService:
         df["net_profit"] = net_profits
         return df
 
+    def get_holding_chips(self, stock_name: str) -> pd.DataFrame:
+        """Fetch holding chips for a specific stock, accounting for matched sells."""
+        return cast(pd.DataFrame, self.db.get_holding_chips(stock_name))
+
     def get_chip_price(self, stock_name: str) -> pd.DataFrame:
         """Fetch price distribution for a specific stock."""
         return cast(pd.DataFrame, self.db.get_chip_price(stock_name))
