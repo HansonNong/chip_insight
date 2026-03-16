@@ -46,6 +46,7 @@ class SellMatchUI:
         self.sell_match_table: ui.table | None = None
         self.on_stock_switch = on_stock_switch
         self.on_row_click = on_row_click
+        self._stock_items: dict[str, ui.item] = {}
         self._build()
 
     def _build(self) -> None:
@@ -110,19 +111,35 @@ class SellMatchUI:
     def clear_stock_list(self) -> None:
         if self.match_stock_list:
             self.match_stock_list.clear()
+            self._stock_items.clear()
 
-    def add_stock_item(self, name: str, callback: Callable[..., Any]) -> None:
+    def add_stock_item(self, name: str, is_selected: bool, callback: Callable[..., Any]) -> None:
         if self.match_stock_list:
             with self.match_stock_list:
-                ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
+                item = ui.item(name, on_click=callback).classes(
+                    "cursor-pointer rounded mb-1 px-3 min-h-[36px] items-center transition-colors border-l-4"
+                )
+                self._update_item_style(item, is_selected)
+                self._stock_items[name] = item
+
+    def _update_item_style(self, item: ui.item, is_selected: bool) -> None:
+        if is_selected:
+            item.classes(remove="hover:bg-gray-100 text-gray-700 border-transparent", add="bg-blue-50 text-blue-600 font-bold border-blue-500")
+        else:
+            item.classes(remove="bg-blue-50 text-blue-600 font-bold border-blue-500", add="hover:bg-gray-100 text-gray-700 border-transparent")
+
+    def set_selected_stock(self, name: str) -> None:
+        for item_name, item in self._stock_items.items():
+            self._update_item_style(item, item_name == name)
 
 class ChipPriceUI:
-    def __init__(self, on_stock_click: Callable[..., Any]) -> None:
+    def __init__(self, on_gen_plot: Callable[..., Any]) -> None:
         """UI for visualizing market chip distribution and holding details."""
         self.chip_stock_list: ui.list | None = None
         self.chip_price_table: ui.table | None = None
         self.chip_dist_plot: ui.plotly | None = None 
-        self.on_stock_click = on_stock_click
+        self.on_gen_plot = on_gen_plot
+        self._stock_items: dict[str, ui.item] = {}
         self._build()
     
     def _build(self) -> None:
@@ -130,9 +147,9 @@ class ChipPriceUI:
             ui.label("筹码价格 + 分布").classes("text-xl font-bold mb-4")
             with ui.column().classes("gap-6"):
                 with ui.row().classes("gap-4 flex-col md:flex-row items-stretch"):
-                    with ui.column().classes("md:w-56"):
+                    with ui.column().classes("w-56 shrink-0"):
                         ui.label("持仓股票").classes("text-sm font-semibold mb-2")
-                        self.chip_stock_list = ui.list().classes("h-[200px] md:h-[260px] overflow-y-auto border rounded p-2")
+                        self.chip_stock_list = ui.list().classes("w-full h-[200px] md:h-[260px] overflow-y-auto border rounded p-2")
                     
                     with ui.column().classes("flex-grow"):
                         ui.label("价格分布明细").classes("text-sm font-semibold mb-2")
@@ -155,7 +172,9 @@ class ChipPriceUI:
                     ''')
                 
                 with ui.column().classes("flex-1"):
-                    ui.label("筹码分布对比").classes("text-sm font-semibold mb-2")
+                    with ui.row().classes("items-center gap-4 mb-2"):
+                        ui.label("筹码分布对比").classes("text-sm font-semibold")
+                        ui.button("生成分布图", icon="insights", on_click=self.on_gen_plot).props("outline dense color=primary")
                     # Placeholder figure to avoid empty init errors
                     self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("h-[500px] w-[500px]")
     
@@ -171,11 +190,26 @@ class ChipPriceUI:
     def clear_stock_list(self) -> None:
         if self.chip_stock_list:
             self.chip_stock_list.clear()
+            self._stock_items.clear()
     
-    def add_stock_item(self, name: str, callback: Callable[..., Any]) -> None:
+    def add_stock_item(self, name: str, is_selected: bool, callback: Callable[..., Any]) -> None:
         if self.chip_stock_list:
             with self.chip_stock_list:
-                ui.item(name, on_click=callback).classes("cursor-pointer hover:bg-blue-50")
+                item = ui.item(name, on_click=callback).classes(
+                    "cursor-pointer rounded mb-1 px-3 min-h-[36px] items-center transition-colors border-l-4"
+                )
+                self._update_item_style(item, is_selected)
+                self._stock_items[name] = item
+
+    def _update_item_style(self, item: ui.item, is_selected: bool) -> None:
+        if is_selected:
+            item.classes(remove="hover:bg-gray-100 text-gray-700 border-transparent", add="bg-blue-50 text-blue-600 font-bold border-blue-500")
+        else:
+            item.classes(remove="bg-blue-50 text-blue-600 font-bold border-blue-500", add="hover:bg-gray-100 text-gray-700 border-transparent")
+
+    def set_selected_stock(self, name: str) -> None:
+        for item_name, item in self._stock_items.items():
+            self._update_item_style(item, item_name == name)
 
 class SummaryUI:
     def __init__(self, on_search: Callable[..., Any], on_code_edit: Callable[..., Any], on_auto_fill: Callable[..., Any]) -> None:

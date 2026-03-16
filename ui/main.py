@@ -71,7 +71,9 @@ class ChipInSightApp:
                 on_stock_switch=self._on_stock_switch,
                 on_row_click=self._open_match_dialog
             )
-            self.chip_price_ui = ChipPriceUI(on_stock_click=self._on_stock_click)
+            self.chip_price_ui = ChipPriceUI(
+                on_gen_plot=lambda: self.refresh_chip_dist_plot(auto_popup=True)
+            )
 
             self.summary_ui = SummaryUI(
                 on_search=self.refresh_chip_summary,
@@ -104,12 +106,17 @@ class ChipInSightApp:
             for name in names:
                 self.sell_match_ui.add_stock_item(
                     name,
+                    name == self.current_selected_stock,
                     lambda _, n=name: self._on_stock_switch(n)
                 )
 
     async def _on_stock_switch(self, stock_name: str) -> None:
         """Switch current stock context."""
         self.current_selected_stock = stock_name
+        if self.sell_match_ui:
+            self.sell_match_ui.set_selected_stock(stock_name)
+        if self.chip_price_ui:
+            self.chip_price_ui.set_selected_stock(stock_name)
         await self.refresh_sell_match_table()
         await self.refresh_chip_price()
 
@@ -231,14 +238,9 @@ class ChipInSightApp:
             for name in names:
                 self.chip_price_ui.add_stock_item(
                     name,
-                    lambda _, n=name: self._on_stock_click(n)
+                    name == self.current_selected_stock,
+                    lambda _, n=name: self._on_stock_switch(n)
                 )
-
-    async def _on_stock_click(self, stock_name: str) -> None:
-        """Handle stock click in chip distribution."""
-        self.current_selected_stock = stock_name
-        await self.refresh_chip_price()
-        await self.refresh_chip_dist_plot(auto_popup=True)
 
     async def get_own_chips(self, stock_name: str) -> list[tuple[float, int]]:
         """Calculate net holding volume for each price point, considering matches."""
@@ -251,6 +253,8 @@ class ChipInSightApp:
     async def refresh_chip_dist_plot(self, auto_popup: bool = False) -> None:
         """Update the plotly distribution chart."""
         if not self.current_selected_stock or not self.chip_price_ui:
+            if auto_popup:
+                ui.notify("请先在列表中选择一支股票", type='warning', position="left")
             return
 
         summary_df = self.service.get_chip_summary(self.current_selected_stock)
