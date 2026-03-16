@@ -22,6 +22,43 @@ class TradeService:
         if df.empty:
             return 0
         
+        # Split large volume trades into multiple records of 100 shares each, with adjusted timestamps for uniqueness
+        split_rows = []
+        row_idx = 0
+        for _, row in df.iterrows():
+            row_idx += 1
+            try:
+                vol = int(row.get('volume', 0))
+            except (ValueError, TypeError):
+                vol = 0
+                
+            if vol > 0:
+                price = float(row.get('price', 0.0))
+                chunks = vol // 100
+                rem = vol % 100
+                
+                orig_time = str(row.get('time', ''))
+                
+                for i in range(chunks):
+                    new_row = row.copy().to_dict()
+                    new_row['volume'] = 100
+                    new_row['amount'] = round(price * 100, 2)
+                    if orig_time and orig_time != 'nan':
+                        new_row['time'] = f"{orig_time}.{row_idx:03d}{i:03d}"
+                    split_rows.append(new_row)
+                    
+                if rem > 0:
+                    new_row = row.copy().to_dict()
+                    new_row['volume'] = rem
+                    new_row['amount'] = round(price * rem, 2)
+                    if orig_time and orig_time != 'nan':
+                        new_row['time'] = f"{orig_time}.{row_idx:03d}{chunks:03d}"
+                    split_rows.append(new_row)
+            else:
+                split_rows.append(row.to_dict())
+                
+        df = pd.DataFrame(split_rows)
+
         # Fetch mapping table for stock names and codes
         mapping: dict[str, str] | None = get_all_a_shares_map("./db")
         
@@ -154,6 +191,12 @@ class TradeService:
         
         if field == 'date' or field == 'time':
             current_time_str = str(trade['time'])
+            frac = ""
+            if "." in current_time_str:
+                parts_frac = current_time_str.split(".", 1)
+                current_time_str = parts_frac[0]
+                frac = "." + parts_frac[1]
+
             parts = current_time_str.split(' ')
             date_part = parts[0] if len(parts) > 0 else '1970-01-01'
             time_part = parts[1] if len(parts) > 1 else '00:00:00'
@@ -161,13 +204,13 @@ class TradeService:
             if field == 'date':
                 try:
                     datetime.strptime(str(value).strip(), "%Y-%m-%d")
-                    updates['time'] = f"{str(value).strip()} {time_part}"
+                    updates['time'] = f"{str(value).strip()} {time_part}{frac}"
                 except ValueError:
                     return False, "日期格式错误或不存在，正确格式应为 YYYY-MM-DD"
             else:  # field == 'time'
                 try:
                     datetime.strptime(str(value).strip(), "%H:%M:%S")
-                    updates['time'] = f"{date_part} {str(value).strip()}"
+                    updates['time'] = f"{date_part} {str(value).strip()}{frac}"
                 except ValueError:
                     return False, "时间格式错误或不存在，正确格式应为 HH:MM:SS"
         

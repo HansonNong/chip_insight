@@ -3,6 +3,7 @@ from typing import Any, cast
 
 import plotly.graph_objects as go
 from nicegui import Client, events, ui
+import pandas as pd
 
 from core.fetch_data import get_stock_data
 from core.parse_input import TradeImageParser
@@ -142,6 +143,7 @@ class ChipInSightApp:
 
         if not df.empty:
             df["time"] = df["time"].astype(str).str.replace("T", " ")
+            df["time"] = df["time"].str.split(".").str[0]
             for _, r in df.iterrows():
                 profit: float = round(r.get("profit", 0), 2)
                 profit_pct: float = r.get("profit_pct", 0)
@@ -185,6 +187,7 @@ class ChipInSightApp:
 
         if not df.empty:
             df["time"] = df["time"].astype(str).str.replace("T", " ")
+            df["time"] = df["time"].str.split(".").str[0]
             for _, r in df.iterrows():
                 rows.append({
                     "buy_id": str(r["id"]),
@@ -239,26 +242,40 @@ class ChipInSightApp:
 
     async def _handle_trade_update(self, data: dict[str, Any]) -> None:
         """Handle inline editing of a trade record."""
-        trade_id = data.get('id')
+        trade_id_raw = data.get('id')
         field = data.get('field')
         value = data.get('value')
 
-        if trade_id is None or field is None:
+        if trade_id_raw is None or field is None:
             ui.notify("更新失败：参数不完整", type='negative', position='left')
             return
 
-        self.logger.info(f"正在更新记录 {trade_id}：字段 {field} -> {value}")
+        if field == 'volume':
+            ui.notify("暂不支持在合并视图下直接修改数量，请删除后重新上传", type='warning', position='left')
+            await self.refresh_table()
+            return
+
+        trade_ids = str(trade_id_raw).split(',')
+
+        self.logger.info(f"正在更新记录 {trade_id_raw}：字段 {field} -> {value}")
         await asyncio.sleep(0.01)
 
-        success, msg = await asyncio.to_thread(
-            self.service.update_trade_record, int(trade_id), str(field), value
-        )
+        all_success = True
+        err_msg = ""
+        for tid in trade_ids:
+            success, msg = await asyncio.to_thread(
+                self.service.update_trade_record, int(tid), str(field), value
+            )
+            if not success:
+                all_success = False
+                err_msg = msg
+                break
 
-        if success:
+        if all_success:
             ui.notify("记录更新成功", type='positive', position='left')
             await self.refresh_all_data()
         else:
-            ui.notify(f"修改失败: {msg}", type='negative', position='left')
+            ui.notify(f"修改失败: {err_msg}", type='negative', position='left')
             await self.refresh_table() # Refresh to revert client-side change
 
     async def get_own_chips(self, stock_name: str) -> list[tuple[float, int]]:
@@ -419,15 +436,39 @@ class ChipInSightApp:
         df = await asyncio.to_thread(self.service.get_all_trades)
         if keyword:
             df = df[df["name"].str.contains(keyword, na=False)]
-        if "time" in df.columns:
-            if not df.empty:
-                df["time"] = df["time"].astype(str).str.replace("T", " ")
-                parts = df["time"].str.split(n=1, expand=True)
-                df["date"] = parts[0] if 0 in parts.columns else ""
-                df["time"] = parts[1] if 1 in parts.columns else ""
-                df["time"] = df["time"].fillna("")
-            else:
-                df["date"] = ""
+            
+        if not df.empty and "time" in df.columns:
+            df["time"] = df["time"].astype(str).str.replace("T", " ")
+            
+            df["_orig_row"] = df["time"].str.extract(r"\.(\d{3})")[0].fillna("000")
+            df["time"] = df["time"].str.split(".").str[0]
+            
+            df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0)
+            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+            
+            group_cols = ["time", "name", "action", "price", "_orig_row"]
+            agg_dict = {
+                "id": lambda x: ",".join(x.astype(str)),
+                "volume": "sum",
+                "amount": "sum"
+            }
+            if "code" in df.columns:
+                group_cols.append("code")
+                
+            df = df.groupby(group_cols, dropna=False, as_index=False).agg(agg_dict)
+            df["amount"] = df["amount"].round(2)
+            df = df.drop(columns=["_orig_row"], errors="ignore")
+            
+            parts = df["time"].str.split(n=1, expand=True)
+            df["date"] = parts[0] if 0 in parts.columns else ""
+            df["time"] = parts[1] if 1 in parts.columns else ""
+            df["time"] = df["time"].fillna("")
+            
+            df = df.sort_values(by=["date", "time"], ascending=[False, False])
+        
+        elif not df.empty:
+            df["date"] = ""
+            
         if "code" not in df.columns:
             df["code"] = ""
 
