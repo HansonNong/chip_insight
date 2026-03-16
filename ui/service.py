@@ -155,6 +155,7 @@ class TradeService:
             return df
 
         net_profits = []
+        current_invests = []
         for name in df["name"]:
             sell_df = self.get_sell_records_with_match(name)
             stock_profit = 0.0
@@ -162,7 +163,15 @@ class TradeService:
                 matched = sell_df[sell_df["match_status"] == "已匹配"]
                 stock_profit = matched["profit"].sum()
             net_profits.append(round(stock_profit, 2))
+
+            holding_df = self.get_holding_chips(name)
+            invest = 0.0
+            if not holding_df.empty and "price" in holding_df.columns and "net_volume" in holding_df.columns:
+                invest = (holding_df["price"] * holding_df["net_volume"]).sum()
+            current_invests.append(round(invest, 2))
+            
         df["net_profit"] = net_profits
+        df["current_invest"] = current_invests
         return df
 
     def get_holding_chips(self, stock_name: str) -> pd.DataFrame:
