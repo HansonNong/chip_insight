@@ -169,9 +169,9 @@ class TradeService:
             if not holding_df.empty and "price" in holding_df.columns and "net_volume" in holding_df.columns:
                 invest = (holding_df["price"] * holding_df["net_volume"]).sum()
             current_invests.append(round(invest, 2))
-            
         df["net_profit"] = net_profits
         df["current_invest"] = current_invests
+
         return df
 
     def get_holding_chips(self, stock_name: str) -> pd.DataFrame:

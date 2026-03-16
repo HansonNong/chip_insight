@@ -204,11 +204,11 @@ class SummaryUI:
                     {"name": "code", "label": "股票代码", "field": "code", "sortable": True, "align": "center"},
                     {"name": "name", "label": "股票", "field": "name", "sortable": True},
                     {"name": "float_shares", "label": "自由流通(亿)", "field": "float_shares", "sortable": True, "align": "center"}, 
-                    {"name": "total_buy", "label": "总买入", "field": "total_buy", "sortable": True},
+                    {"name": "total_buy", "label": "总买入", "field": "total_buy", "sortable": True}, 
                     {"name": "total_sell", "label": "总卖出", "field": "total_sell", "sortable": True},
                     {"name": "hold_volume", "label": "当前持仓", "field": "hold_volume", "sortable": True},
                     {"name": "current_invest", "label": "当前投入", "field": "current_invest", "sortable": True},
-                    {"name": "net_profit", "label": "已配对净盈亏", "field": "net_profit", "sortable": True},
+                    {"name": "net_profit", "label": "实现盈利", "field": "net_profit", "sortable": True},
                 ],
                 rows=[],
                 row_key="summary_key"
@@ -236,7 +236,7 @@ class SummaryUI:
                 </q-td>
             ''')
             
-            self.chip_summary_table.add_slot("body-cell-current_invest", '''
+            self.chip_summary_table.add_slot("body-cell-current_invest", ''' 
                 <q-td :props="props">
                     {{ (props.value || 0).toFixed(2) }}
                 </q-td>
