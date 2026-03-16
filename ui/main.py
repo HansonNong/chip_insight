@@ -112,7 +112,7 @@ class ChipInSightApp:
     async def refresh_global_stock_list(self) -> None:
         """Update available stocks for the global selector."""
         df = await asyncio.to_thread(self.service.get_chip_summary, "")
-        df = df[df["hold_volume"] != 0].drop_duplicates("name")
+        df = df.drop_duplicates("name")
         names: list[str] = sorted(df["name"].tolist()) if not df.empty else []
 
         if self.stock_selector_ui:
