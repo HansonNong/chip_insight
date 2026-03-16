@@ -443,6 +443,36 @@ class ChipInSightApp:
             data=dist_data,
             own_chips=own_chips
         )
+
+        if own_chips:
+            own_prices = [p for p, vol in own_chips if vol != 0]
+            if own_prices:
+                min_own, max_own = min(own_prices), max(own_prices)
+                
+                yaxis = getattr(fig.layout, 'yaxis', None)
+                y_range = getattr(yaxis, 'range', None)
+                if y_range and len(y_range) == 2:
+                    try:
+                        new_min = min(float(y_range[0]), min_own * 0.95)
+                        new_max = max(float(y_range[1]), max_own * 1.05)
+                        fig.update_yaxes(range=[new_min, new_max])
+                    except (ValueError, TypeError):
+                        pass
+                else:
+                    y_vals = []
+                    for trace in fig.data:
+                        if getattr(trace, 'y', None) is not None:
+                            for y in trace.y:
+                                try:
+                                    if y is not None:
+                                        y_vals.append(float(y))
+                                except (ValueError, TypeError):
+                                    pass
+                    if y_vals:
+                        new_min = min(min(y_vals), min_own) * 0.95
+                        new_max = max(max(y_vals), max_own) * 1.05
+                        fig.update_yaxes(range=[new_min, new_max])
+
         self.chip_price_ui.set_chip_plot(fig)
 
     async def refresh_chip_price(self) -> None:
