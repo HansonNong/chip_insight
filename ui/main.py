@@ -61,7 +61,7 @@ class ChipInSightApp:
 
         container_style = (
             "w-full mx-auto my-1 px-1 sm:px-2 "
-            "min-h-[80vh] sm:max-w-6xl"
+            "min-h-[80vh] sm:max-w-6xl pb-16"
         )
         with ui.column().classes(container_style):
             self.upload_card = UploadCardUI(on_multi_upload=self._parse_trade_images_batch)
@@ -403,7 +403,8 @@ class ChipInSightApp:
                 ui.notify(
                     f"请先配置 {self.current_selected_stock} 的自由流通股",
                     type='warning',
-                    position="left"
+                    position="left",
+                    timeout=1.0
                 )
                 await self._edit_float_shares(row.to_dict())
             return

@@ -95,7 +95,7 @@ class SellMatchUI:
                 ],
                 rows=[],
                 row_key="sell_id"
-            ).classes("h-[320px] w-full")
+            ).classes("h-[600px] w-full")
 
             # Vue slots for custom cell rendering
             self.sell_match_table.add_slot("body-cell-profit", '''
@@ -156,7 +156,7 @@ class ChipPriceUI:
                         ],
                         rows=[],
                         row_key="price_key"
-                    ).classes("h-[260px] w-full")
+                    ).classes("h-[500px] w-full")
 
                     self.chip_price_table.add_slot("body-cell-net_volume", '''
                         <q-td :props="props">
@@ -171,7 +171,7 @@ class ChipPriceUI:
                         ui.label("筹码分布对比").classes("text-sm font-semibold")
                         ui.button("生成分布图", icon="insights", on_click=self.on_gen_plot).props("outline dense color=primary")
                     # Placeholder figure to avoid empty init errors
-                    self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("h-[500px] w-full")
+                    self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("h-[600px] w-full")
     
     def set_rows(self, rows: list[dict[str, Any]]) -> None:
         if self.chip_price_table:
@@ -219,7 +219,7 @@ class SummaryUI:
                 ],
                 rows=[],
                 row_key="summary_key"
-            ).classes("h-[260px]")
+            ).classes("h-[600px] w-full")
 
             self.chip_summary_table.add_slot("body-cell-code", '''
                 <q-td :props="props" @click.stop="$parent.$emit('edit_code', props.row)" class="cursor-pointer text-blue-500 font-medium">
@@ -293,7 +293,7 @@ class TradeTableUI:
                 ],
                 rows=[],
                 row_key="id"
-            ).classes("h-[360px]")
+            ).classes("h-[600px] w-full")
 
             self.table.add_slot("body-cell-action", '''
                 <q-td :props="props">
@@ -368,7 +368,7 @@ class BuyMatchDialogUI:
                 ],
                 rows=[],
                 row_key="buy_id"
-            ).classes("h-[400px]")
+            ).classes("h-[400px] w-full")
             
             self.available_buy_table.add_slot("body-cell-status", '''
                 <q-td :props="props">
