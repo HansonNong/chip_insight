@@ -6,7 +6,6 @@ from db.database import TradeDatabase
 from core.parse_input import TradeImageParser
 from core.fetch_data import get_all_a_shares_map
 
-
 class TradeService:
     def __init__(self, db: TradeDatabase, parser: TradeImageParser) -> None:
         """Initialize service with database and parser instances."""
@@ -14,7 +13,7 @@ class TradeService:
         self.parser: TradeImageParser = parser
 
     def parse_image(self, img_bytes: bytes) -> pd.DataFrame:
-        """Parse trade record information from image bytes."""
+
         return cast(pd.DataFrame, self.parser.parse(img_bytes))
 
     def save_trades(self, df: pd.DataFrame) -> int:
@@ -22,10 +21,36 @@ class TradeService:
         if df.empty:
             return 0
         
-        # Split large volume trades into multiple records of 100 shares each, with adjusted timestamps for uniqueness
+        existing_trades = self.db.get_all_trades()
+        existing_keys = set()
+        if not existing_trades.empty:
+            for _, r in existing_trades.iterrows():
+                time_str = str(r.get('time', '')).split('.')[0]
+                name = str(r.get('name', ''))
+                price = float(r.get('price', 0.0))
+                action = str(r.get('action', ''))
+                existing_keys.add((name, time_str, round(price, 2), action))
+
+        unique_raw_trades = []
+        for _, row in df.iterrows():
+            row_time_str = str(row.get('time', '')).split('.')[0]
+            row_name = str(row.get('name', ''))
+            row_price = float(row.get('price', 0.0))
+            row_action = str(row.get('action', ''))
+            
+            key = (row_name, row_time_str, round(row_price, 2), row_action)
+            if key not in existing_keys:
+                unique_raw_trades.append(row.to_dict())
+                existing_keys.add(key)
+
+        if not unique_raw_trades:
+            return 0
+            
+        unique_df = pd.DataFrame(unique_raw_trades)
+
         split_rows = []
         row_idx = 0
-        for _, row in df.iterrows():
+        for _, row in unique_df.iterrows():
             row_idx += 1
             try:
                 vol = int(row.get('volume', 0))
@@ -46,6 +71,7 @@ class TradeService:
                     if orig_time and orig_time != 'nan':
                         new_row['time'] = f"{orig_time}.{row_idx:03d}{i:03d}"
                     split_rows.append(new_row)
+
                     
                 if rem > 0:
                     new_row = row.copy().to_dict()
@@ -56,10 +82,9 @@ class TradeService:
                     split_rows.append(new_row)
             else:
                 split_rows.append(row.to_dict())
-                
-        df = pd.DataFrame(split_rows)
 
-        # Fetch mapping table for stock names and codes
+        final_df = pd.DataFrame(split_rows)
+
         mapping: dict[str, str] | None = get_all_a_shares_map("./db")
         
         if mapping:
@@ -71,9 +96,9 @@ class TradeService:
                     return mapping.get(name, code)
                 return code
 
-            df['code'] = df.apply(fill_func, axis=1)
 
-        return int(self.db.save_trades(df))
+            final_df['code'] = final_df.apply(fill_func, axis=1)
+        return int(self.db.save_trades(final_df))
 
     def backup_and_clear(self) -> bool:
         """Backup current data and clear the trade database."""
