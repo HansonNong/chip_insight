@@ -72,7 +72,9 @@ class ChipInSightApp:
             self.stock_selector_ui = StockSelectorUI(on_change=self._on_stock_switch)
 
             self.sell_match_ui = SellMatchUI(
-                on_row_click=self._open_match_dialog
+                on_row_click=self._open_match_dialog,
+                on_auto_match=self._handle_auto_match,
+                on_clear_matches=self._handle_clear_matches
             )
             self.chip_price_ui = ChipPriceUI(
                 on_gen_plot=lambda: self.refresh_chip_dist_plot(auto_popup=True)
@@ -243,6 +245,49 @@ class ChipInSightApp:
 
         except Exception as err:
             print(f"CRITICAL ERROR: {err}")
+
+    async def _handle_auto_match(self) -> None:
+        """Handle auto FIFO match for all unmatched sells."""
+        if not self.current_selected_stock:
+            ui.notify("请先在上方选择一支股票", type='warning', position="left")
+            return
+            
+        ui.notify(f"正在为 {self.current_selected_stock} 执行一键匹配...", position="left")
+        await asyncio.sleep(0.01)
+        
+        matched_count = await asyncio.to_thread(self.service.auto_match_fifo, self.current_selected_stock)
+        if matched_count > 0:
+            ui.notify(f"匹配完成，共成功匹配 {matched_count} 笔卖出", type='positive', position="left")
+            await self.refresh_sell_match_table()
+            await self.refresh_chip_price()
+            await self.refresh_chip_summary()
+        else:
+            ui.notify("未发现可匹配的记录", type='warning', position="left")
+
+    async def _handle_clear_matches(self) -> None:
+        """Handle clearing all matched sells."""
+        if not self.current_selected_stock:
+            ui.notify("请先在上方选择一支股票", type='warning', position="left")
+            return
+            
+        with ui.dialog() as dialog, ui.card().classes("p-6"):
+            ui.label(f"确定要解除 {self.current_selected_stock} 的所有匹配吗？").classes("text-lg font-bold text-red-600")
+            with ui.row().classes("justify-end gap-2 mt-4"):
+                ui.button("取消", on_click=dialog.close).props("outline")
+                ui.button("确定", on_click=lambda: self._confirm_clear_matches(dialog), color="red")
+        dialog.open()
+
+    async def _confirm_clear_matches(self, dialog: ui.dialog) -> None:
+        """Confirm clear all matches."""
+        dialog.close()
+        cleared_count = await asyncio.to_thread(self.service.clear_all_matches, self.current_selected_stock)
+        if cleared_count > 0:
+            ui.notify(f"已成功解除 {cleared_count} 笔匹配", type='positive', position="left")
+            await self.refresh_sell_match_table()
+            await self.refresh_chip_price()
+            await self.refresh_chip_summary()
+        else:
+            ui.notify("当前没有已匹配的记录", type='warning', position="left")
 
     async def _handle_trade_update(self, data: dict[str, Any]) -> None:
         """Handle inline editing of a trade record."""

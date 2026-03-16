@@ -67,15 +67,22 @@ class StockSelectorUI:
             self.select.value = value
 
 class SellMatchUI:
-    def __init__(self, on_row_click: Callable[..., Any]) -> None:
+    def __init__(self, on_row_click: Callable[..., Any], on_auto_match: Callable[..., Any], on_clear_matches: Callable[..., Any]) -> None:
         """UI for matching sell orders with historical buy orders to calculate profit."""
         self.sell_match_table: ui.table | None = None
         self.on_row_click = on_row_click
+        self.on_auto_match = on_auto_match
+        self.on_clear_matches = on_clear_matches
         self._build()
 
     def _build(self) -> None:
         with ui.card().classes("p-2 sm:p-6 w-full mb-4"):
-            ui.label("卖出筹码匹配").classes("text-xl font-bold mb-4")
+            with ui.row().classes("items-center justify-between w-full mb-4"):
+                ui.label("卖出筹码匹配").classes("text-xl font-bold")
+                with ui.row().classes("gap-2"):
+                    ui.button("一键匹配", icon="auto_fix_high", on_click=self.on_auto_match).props("outline size=sm color=primary").tooltip("按先进先出原则匹配所有未匹配的卖出")
+                    ui.button("一键解除", icon="link_off", on_click=self.on_clear_matches).props("outline size=sm color=negative").tooltip("解除该股票所有已匹配的卖出")
+                    
             self.sell_match_table = ui.table(
                 columns=[
                     {"name": "time", "label": "卖出时间", "field": "time", "sortable": True},

@@ -144,6 +144,47 @@ class TradeService:
         """Fetch sell records along with their matching status."""
         return cast(pd.DataFrame, self.db.get_sell_records_with_match(stock_name))
 
+    def auto_match_fifo(self, stock_name: str) -> int:
+        """Automatically match unmatched sells using FIFO principle."""
+        sells_df = self.get_sell_records_with_match(stock_name)
+        if sells_df.empty:
+            return 0
+            
+        unmatched_sells = sells_df[sells_df["match_status"] == "未匹配"].sort_values(by="time")
+        if unmatched_sells.empty:
+            return 0
+            
+        matched_count = 0
+        for _, sell in unmatched_sells.iterrows():
+            sell_id = str(sell["id"])
+            buys_df = self.get_available_buys(stock_name, sell_id)
+            if buys_df.empty:
+                continue
+                
+            # Filter available buys and select the earliest one (FIFO)
+            available_buys = buys_df[(buys_df["total_remain"] > 0) & (buys_df["current_matched_vol"] == 0)].sort_values(by="time")
+            
+            if not available_buys.empty:
+                buy_id = str(available_buys.iloc[0]["id"])
+                if self.create_match(sell_id, buy_id):
+                    matched_count += 1
+                    
+        return matched_count
+
+    def clear_all_matches(self, stock_name: str) -> int:
+        """Clear all matches for a specific stock."""
+        sells_df = self.get_sell_records_with_match(stock_name)
+        if sells_df.empty:
+            return 0
+            
+        matched_sells = sells_df[sells_df["match_status"] == "已匹配"]
+        cleared_count = 0
+        for _, sell in matched_sells.iterrows():
+            sell_id = str(sell["id"])
+            if self.remove_match(sell_id):
+                cleared_count += 1
+        return cleared_count
+
     def get_chip_summary(self, keyword: str = "") -> pd.DataFrame:
         """Get summary of stock holdings filtered by keyword."""
         return cast(pd.DataFrame, self.db.get_chip_summary(keyword))
