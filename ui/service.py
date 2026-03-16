@@ -181,6 +181,58 @@ class TradeService:
                     count += 1
         return count
     
+    def delete_combined_trades(self, trade_ids_str: str) -> tuple[bool, str]:
+        """Delete a group of combined trades and unbind any matches."""
+        trade_ids = [int(x) for x in trade_ids_str.split(',') if x.strip()]
+        
+        for tid in trade_ids:
+            self.db.remove_sell_buy_match(str(tid))
+        
+            if hasattr(self.db, 'delete_trade'):
+                success = self.db.delete_trade(tid)
+                if success is False:
+                    return False, "底层数据库执行删除记录失败"
+        
+            else:
+                return False, "底层数据库缺少 delete_trade 方法，请在 db/database.py 中补充实现"
+        
+        return True, ""
+
+    def update_trade_volume(self, trade_ids_str: str, new_volume: int) -> tuple[bool, str]:
+        """Update volume for a combined trade, unbind matches, and re-split."""
+        if new_volume <= 0:
+            return False, "数量不能小于等于 0"
+            
+        trade_ids = [int(x) for x in trade_ids_str.split(',') if x.strip()]
+        if not trade_ids:
+            return False, "无有效记录"
+            
+        base_trade = self.db.get_trade(trade_ids[0])
+        if not base_trade:
+            return False, "交易记录不存在"
+            
+        success, msg = self.delete_combined_trades(trade_ids_str)
+        if not success:
+            return False, f"删除旧记录失败: {msg}"
+                
+        time_str = str(base_trade.get('time', ''))
+        if '.' in time_str:
+            time_str = time_str.split('.')[0]
+            
+        row = {
+            'time': time_str,
+            'name': base_trade.get('name', ''),
+            'code': base_trade.get('code', ''),
+            'action': base_trade.get('action', ''),
+            'price': base_trade.get('price', 0.0),
+            'volume': new_volume
+        }
+        
+        df = pd.DataFrame([row])
+        self.save_trades(df)
+
+        return True, ""
+
     def update_trade_record(self, trade_id: int, field: str, value: Any) -> tuple[bool, str]:
         """Update a single field of a trade record."""
         trade = self.db.get_trade(trade_id)

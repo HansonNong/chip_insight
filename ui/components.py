@@ -275,6 +275,7 @@ class TradeTableUI:
                     {"name": "price", "label": "价格", "field": "price", "sortable": True},
                     {"name": "volume", "label": "数量", "field": "volume", "sortable": True},
                     {"name": "amount", "label": "金额", "field": "amount", "sortable": True},
+                    {"name": "operate", "label": "操作", "field": "operate", "align": "center"},
                 ],
                 rows=[],
                 row_key="id"
@@ -315,6 +316,13 @@ class TradeTableUI:
             self.table.add_slot('body-cell-name', text_slot_template.format(field='name', input_props=''))
             self.table.add_slot('body-cell-price', number_slot_template.format(field='price'))
             self.table.add_slot('body-cell-volume', number_slot_template.format(field='volume'))
+            
+            self.table.add_slot('body-cell-operate', '''
+                <q-td :props="props">
+                    <q-btn flat dense color="red" icon="delete" size="sm" 
+                           @click.stop="$parent.$emit('delete_trade', props.row.id)" />
+                </q-td>
+            ''')
 
 
     def get_search_keyword(self) -> str:

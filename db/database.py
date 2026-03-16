@@ -412,3 +412,20 @@ class TradeDatabase:
         except Exception as e:
             print(f"[ERROR] 更新交易记录失败: {e}")
             return False
+
+    def delete_trade(self, trade_id: int) -> bool:
+        """Permanently delete a specific trade record and its associated matches."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "DELETE FROM trade_matches WHERE buy_id = ? OR sell_id = ?", 
+                    (trade_id, trade_id)
+                )
+                cursor.execute("DELETE FROM trades WHERE id = ?", (trade_id,))
+                conn.commit()
+                return True
+            
+        except Exception as e:
+            print(f"[ERROR] 删除单条交易记录失败: {e}")
+            return False

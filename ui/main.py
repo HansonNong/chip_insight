@@ -100,6 +100,10 @@ class ChipInSightApp:
                     'update_trade', 
                     lambda e: self._handle_trade_update(e.args)
                 )
+                self.trade_table_ui.table.on(
+                    'delete_trade',
+                    lambda e: self._handle_trade_delete(e.args)
+                )
 
         self.buy_dialog = BuyMatchDialogUI(on_match=self._do_match)
 
@@ -251,8 +255,17 @@ class ChipInSightApp:
             return
 
         if field == 'volume':
-            ui.notify("暂不支持在合并视图下直接修改数量，请删除后重新上传", type='warning', position='left')
-            await self.refresh_table()
+            self.logger.info(f"正在更新数量 {trade_id_raw} -> {value}")
+            await asyncio.sleep(0.01)
+            success, msg = await asyncio.to_thread(
+                self.service.update_trade_volume, str(trade_id_raw), int(value)
+            )
+            if success:
+                ui.notify("数量更新成功，已重新拆分并解绑匹配", type='positive', position='left')
+                await self.refresh_all_data()
+            else:
+                ui.notify(f"修改失败: {msg}", type='negative', position='left')
+                await self.refresh_table()
             return
 
         trade_ids = str(trade_id_raw).split(',')
@@ -277,6 +290,35 @@ class ChipInSightApp:
         else:
             ui.notify(f"修改失败: {err_msg}", type='negative', position='left')
             await self.refresh_table() # Refresh to revert client-side change
+
+    async def _handle_trade_delete(self, trade_ids_raw: Any) -> None:
+        """Handle deletion of a combined trade record."""
+        trade_ids_str = str(trade_ids_raw)
+        
+        with ui.dialog() as dialog, ui.card().classes("p-6"):
+            ui.label("确定要删除这条交易记录吗？").classes("text-lg font-bold text-red-600")
+            ui.label("删除后，该记录及相关匹配将被彻底清除。")
+
+            with ui.row().classes("justify-end gap-2 mt-4"):
+                ui.button("取消", on_click=dialog.close).props("outline")
+                async def _confirm() -> None:
+                    
+                    dialog.close()
+                    self.logger.info(f"正在删除记录 {trade_ids_str}")
+                    success, msg = await asyncio.to_thread(
+                        self.service.delete_combined_trades, trade_ids_str
+                    )
+
+                    if success:
+                        self.logger.info(f"记录已删除 {trade_ids_str}")
+                        ui.notify("记录已删除", type='positive', position='left')
+                        await self.refresh_all_data()
+                    else:
+                        self.logger.info(f"删除失败 {trade_ids_str}")
+                        ui.notify(f"删除失败: {msg}", type='negative', position='left')
+
+                ui.button("确定", on_click=_confirm, color="red")
+        dialog.open()
 
     async def get_own_chips(self, stock_name: str) -> list[tuple[float, int]]:
         """Calculate net holding volume for each price point, considering matches."""
