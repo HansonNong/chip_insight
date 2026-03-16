@@ -11,7 +11,7 @@ from db.database import TradeDatabase
 
 from .components import (
     BuyMatchDialogUI, ChipPriceUI, HeaderUI,
-    SellMatchUI, SummaryUI, TradeTableUI, UploadCardUI
+    SellMatchUI, SummaryUI, TradeTableUI, UploadCardUI, StockSelectorUI
 )
 from .config import Config
 from .logger import AppLogger
@@ -37,6 +37,7 @@ class ChipInSightApp:
 
         self.header: HeaderUI | None = None
         self.upload_card: UploadCardUI | None = None
+        self.stock_selector_ui: StockSelectorUI | None = None
         self.sell_match_ui: SellMatchUI | None = None
         self.chip_price_ui: ChipPriceUI | None = None
         self.summary_ui: SummaryUI | None = None
@@ -67,8 +68,9 @@ class ChipInSightApp:
             if self.upload_card and self.upload_card.tip_label:
                 self.logger.set_tip_label(self.upload_card.tip_label)
 
+            self.stock_selector_ui = StockSelectorUI(on_change=self._on_stock_switch)
+
             self.sell_match_ui = SellMatchUI(
-                on_stock_switch=self._on_stock_switch,
                 on_row_click=self._open_match_dialog
             )
             self.chip_price_ui = ChipPriceUI(
@@ -92,31 +94,39 @@ class ChipInSightApp:
                 )
 
             self.trade_table_ui = TradeTableUI(on_search=self.refresh_table)
+            if self.trade_table_ui.table:
+                self.trade_table_ui.table.on(
+                    'update_trade', 
+                    lambda e: self._handle_trade_update(e.args)
+                )
 
         self.buy_dialog = BuyMatchDialogUI(on_match=self._do_match)
 
-    async def refresh_match_stock_list(self) -> None:
-        """Update available stocks for matching."""
+    async def refresh_global_stock_list(self) -> None:
+        """Update available stocks for the global selector."""
         df = await asyncio.to_thread(self.service.get_chip_summary, "")
         df = df[df["hold_volume"] != 0].drop_duplicates("name")
         names: list[str] = sorted(df["name"].tolist()) if not df.empty else []
 
-        if self.sell_match_ui:
-            self.sell_match_ui.clear_stock_list()
-            for name in names:
-                self.sell_match_ui.add_stock_item(
-                    name,
-                    name == self.current_selected_stock,
-                    lambda _, n=name: self._on_stock_switch(n)
-                )
+        if self.stock_selector_ui:
+            self.stock_selector_ui.set_options(names)
+            if not names:
+                self.current_selected_stock = ""
+                self.stock_selector_ui.set_value("")
+            elif not self.current_selected_stock or self.current_selected_stock not in names:
+                self.stock_selector_ui.set_value(names[0])
+            else:
+                self.stock_selector_ui.set_value(self.current_selected_stock)
 
-    async def _on_stock_switch(self, stock_name: str) -> None:
+    async def _on_stock_switch(self, e: Any) -> None:
         """Switch current stock context."""
-        self.current_selected_stock = stock_name
-        if self.sell_match_ui:
-            self.sell_match_ui.set_selected_stock(stock_name)
-        if self.chip_price_ui:
-            self.chip_price_ui.set_selected_stock(stock_name)
+        stock_name = e.value if hasattr(e, 'value') else e
+        if not stock_name:
+            return
+        if stock_name == self.current_selected_stock:
+            return
+            
+        self.current_selected_stock = str(stock_name)
         await self.refresh_sell_match_table()
         await self.refresh_chip_price()
 
@@ -227,20 +237,29 @@ class ChipInSightApp:
         except Exception as err:
             print(f"CRITICAL ERROR: {err}")
 
-    async def refresh_chip_stock_list(self) -> None:
-        """Update stock list in chip view."""
-        df = await asyncio.to_thread(self.service.get_chip_summary, "")
-        df = df[df["hold_volume"] != 0].drop_duplicates("name")
-        names: list[str] = sorted(df["name"].tolist()) if not df.empty else []
+    async def _handle_trade_update(self, data: dict[str, Any]) -> None:
+        """Handle inline editing of a trade record."""
+        trade_id = data.get('id')
+        field = data.get('field')
+        value = data.get('value')
 
-        if self.chip_price_ui:
-            self.chip_price_ui.clear_stock_list()
-            for name in names:
-                self.chip_price_ui.add_stock_item(
-                    name,
-                    name == self.current_selected_stock,
-                    lambda _, n=name: self._on_stock_switch(n)
-                )
+        if trade_id is None or field is None:
+            ui.notify("更新失败：参数不完整", type='negative', position='left')
+            return
+
+        self.logger.info(f"正在更新记录 {trade_id}：字段 {field} -> {value}")
+        await asyncio.sleep(0.01)
+
+        success, msg = await asyncio.to_thread(
+            self.service.update_trade_record, int(trade_id), str(field), value
+        )
+
+        if success:
+            ui.notify("记录更新成功", type='positive', position='left')
+            await self.refresh_all_data()
+        else:
+            ui.notify(f"修改失败: {msg}", type='negative', position='left')
+            await self.refresh_table() # Refresh to revert client-side change
 
     async def get_own_chips(self, stock_name: str) -> list[tuple[float, int]]:
         """Calculate net holding volume for each price point, considering matches."""
@@ -561,9 +580,8 @@ class ChipInSightApp:
 
     async def refresh_all_data(self) -> None:
         """Global UI data refresh."""
-        await self.refresh_match_stock_list()
+        await self.refresh_global_stock_list()
         await self.refresh_sell_match_table()
-        await self.refresh_chip_stock_list()
         await self.refresh_chip_price()
         await self.refresh_chip_summary()
         await self.refresh_table()

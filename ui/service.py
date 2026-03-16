@@ -1,5 +1,6 @@
 import pandas as pd
 from typing import Any, cast
+from datetime import datetime
 
 from db.database import TradeDatabase
 from core.parse_input import TradeImageParser
@@ -143,6 +144,49 @@ class TradeService:
                     count += 1
         return count
     
+    def update_trade_record(self, trade_id: int, field: str, value: Any) -> tuple[bool, str]:
+        """Update a single field of a trade record."""
+        trade = self.db.get_trade(trade_id)
+        if not trade:
+            return False, "交易记录不存在"
+
+        updates: dict[str, Any] = {}
+        
+        if field == 'date' or field == 'time':
+            current_time_str = str(trade['time'])
+            parts = current_time_str.split(' ')
+            date_part = parts[0] if len(parts) > 0 else '1970-01-01'
+            time_part = parts[1] if len(parts) > 1 else '00:00:00'
+
+            if field == 'date':
+                try:
+                    datetime.strptime(str(value).strip(), "%Y-%m-%d")
+                    updates['time'] = f"{str(value).strip()} {time_part}"
+                except ValueError:
+                    return False, "日期格式错误或不存在，正确格式应为 YYYY-MM-DD"
+            else:  # field == 'time'
+                try:
+                    datetime.strptime(str(value).strip(), "%H:%M:%S")
+                    updates['time'] = f"{date_part} {str(value).strip()}"
+                except ValueError:
+                    return False, "时间格式错误或不存在，正确格式应为 HH:MM:SS"
+        
+        elif field == 'price' or field == 'volume':
+            if float(value) <= 0:
+                return False, f"{'价格' if field == 'price' else '数量'}不能小于等于 0"
+            updates[field] = value
+            price = float(updates.get('price', trade['price']))
+            volume = int(updates.get('volume', trade['volume']))
+            updates['amount'] = round(price * volume, 2)
+        
+        else:  # name
+            if not str(value).strip():
+                return False, "名称不能为空"
+            updates[field] = value
+
+        success = bool(self.db.update_trade(trade_id, updates))
+        return success, "" if success else "数据库更新失败"
+
     def update_float_shares(self, stock_name: str, float_shares: float) -> bool:
         """Update floating shares information for a stock."""
         return bool(self.db.update_float_shares(stock_name, float_shares))

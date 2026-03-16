@@ -377,3 +377,38 @@ class TradeDatabase:
         except Exception as e:
             print(f"[ERROR] 更新流通股失败: {e}")
             return False
+
+    def get_trade(self, trade_id: int) -> dict[str, Any] | None:
+        """Fetch a single trade by ID."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM trades WHERE id = ?", (trade_id,))
+                row = cursor.fetchone()
+                return dict(row) if row else None
+        except Exception as e:
+            print(f"[ERROR] 获取单条交易记录失败: {e}")
+            return None
+
+    def update_trade(self, trade_id: int, updates: dict[str, Any]) -> bool:
+        """Update specific fields of a single trade record."""
+        if not updates:
+            return False
+
+        set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
+        params = list(updates.values()) + [trade_id]
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(f'''
+                    UPDATE trades 
+                    SET {set_clause}
+                    WHERE id = ?
+                ''', params)
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            print(f"[ERROR] 更新交易记录失败: {e}")
+            return False
