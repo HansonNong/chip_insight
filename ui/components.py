@@ -195,7 +195,7 @@ class SummaryUI:
         self._build()
 
     def _build(self) -> None:
-        with ui.card().classes("p-2 sm:p-6"):
+        with ui.card().classes("p-2 sm:p-6 w-full"):
             ui.label("筹码统计").classes("text-xl font-bold mb-4")
             ui.button(
                 "自动补全代码", 
@@ -208,7 +208,7 @@ class SummaryUI:
                 on_change=self.on_search
             ).props("outlined dense").classes("w-64 mb-4")
                         
-            with ui.expansion('筹码统计列表', icon='list').classes('w-full border rounded-md'):
+            with ui.expansion('筹码统计列表', icon='list').classes('w-full border rounded-md overflow-hidden'):
                 self.chip_summary_table = ui.table(
                     columns=[
                         {"name": "code", "label": "股票代码", "field": "code", "sortable": True, "align": "center"},
@@ -222,7 +222,7 @@ class SummaryUI:
                     ],
                     rows=[],
                     row_key="summary_key"
-                ).classes("max-h-[700px] w-full")
+                ).classes("max-h-[700px] w-full max-w-full overflow-x-auto")
 
             self.chip_summary_table.add_slot("body-cell-code", '''
                 <q-td :props="props" @click.stop="$parent.$emit('edit_code', props.row)" class="cursor-pointer text-blue-500 font-medium">
@@ -276,14 +276,14 @@ class TradeTableUI:
         self._build()
 
     def _build(self) -> None:
-        with ui.card().classes("p-2 sm:p-6"):
+        with ui.card().classes("p-2 sm:p-6 w-full"):
             ui.label("流水明细").classes("text-xl font-bold mb-4")
             self.search_input = ui.input(
                 placeholder="搜索股票...", 
                 on_change=self.on_search
             ).props("outlined dense").classes("w-64 mb-4")
 
-            with ui.expansion('流水明细列表', icon='list').classes('w-full border rounded-md'):
+            with ui.expansion('流水明细列表', icon='list').classes('w-full border rounded-md overflow-hidden'):
                 self.table = ui.table(
                     columns=[
                         {"name": "date", "label": "日期", "field": "date", "sortable": True},
@@ -297,7 +297,7 @@ class TradeTableUI:
                     ],
                     rows=[],
                     row_key="id"
-                ).classes("max-h-[700px] w-full")
+                ).classes("max-h-[700px] w-full max-w-full overflow-x-auto")
 
             self.table.add_slot("body-cell-action", '''
                 <q-td :props="props">
