@@ -83,19 +83,20 @@ class SellMatchUI:
                     ui.button("一键匹配", icon="auto_fix_high", on_click=self.on_auto_match).props("outline size=sm color=primary").tooltip("按先进先出原则匹配所有未匹配的卖出")
                     ui.button("一键解除", icon="link_off", on_click=self.on_clear_matches).props("outline size=sm color=negative").tooltip("解除该股票所有已匹配的卖出")
                     
-            self.sell_match_table = ui.table(
-                columns=[
-                    {"name": "time", "label": "卖出时间", "field": "time", "sortable": True},
-                    {"name": "price", "label": "卖出价", "field": "price", "sortable": True},
-                    {"name": "volume", "label": "卖出量", "field": "volume", "sortable": True},
-                    {"name": "profit", "label": "盈利", "field": "profit", "sortable": True},
-                    {"name": "profit_pct", "label": "盈利率", "field": "profit_pct", "sortable": True},
-                    {"name": "annual", "label": "年化(单利)", "field": "annual", "sortable": True},
-                    {"name": "status", "label": "状态", "field": "status", "align": "center"},
-                ],
-                rows=[],
-                row_key="sell_id"
-            ).classes("h-[600px] w-full")
+            with ui.expansion('卖出匹配列表', icon='list').classes('w-full border rounded-md'):
+                self.sell_match_table = ui.table(
+                    columns=[
+                        {"name": "time", "label": "卖出时间", "field": "time", "sortable": True},
+                        {"name": "price", "label": "卖出价", "field": "price", "sortable": True},
+                        {"name": "volume", "label": "卖出量", "field": "volume", "sortable": True},
+                        {"name": "profit", "label": "盈利", "field": "profit", "sortable": True},
+                        {"name": "profit_pct", "label": "盈利率", "field": "profit_pct", "sortable": True},
+                        {"name": "annual", "label": "年化(单利)", "field": "annual", "sortable": True},
+                        {"name": "status", "label": "状态", "field": "status", "align": "center"},
+                    ],
+                    rows=[],
+                    row_key="sell_id"
+                ).classes("max-h-[700px] w-full")
 
             # Vue slots for custom cell rendering
             self.sell_match_table.add_slot("body-cell-profit", '''
@@ -148,15 +149,16 @@ class ChipPriceUI:
             with ui.column().classes("gap-6 w-full"):
                 with ui.column().classes("w-full"):
                     ui.label("价格分布明细").classes("text-sm font-semibold mb-2")
-                    self.chip_price_table = ui.table(
-                        columns=[
-                            {"name": "name", "label": "股票", "field": "name", "sortable": True},
-                            {"name": "price", "label": "价格", "field": "price", "sortable": True},
-                            {"name": "net_volume", "label": "数量", "field": "net_volume", "sortable": True},
-                        ],
-                        rows=[],
-                        row_key="price_key"
-                    ).classes("h-[500px] w-full")
+                    with ui.expansion('价格分布列表', icon='list').classes('w-full border rounded-md'):
+                        self.chip_price_table = ui.table(
+                            columns=[
+                                {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                                {"name": "price", "label": "价格", "field": "price", "sortable": True},
+                                {"name": "net_volume", "label": "数量", "field": "net_volume", "sortable": True},
+                            ],
+                            rows=[],
+                            row_key="price_key"
+                        ).classes("max-h-[700px] w-full")
 
                     self.chip_price_table.add_slot("body-cell-net_volume", '''
                         <q-td :props="props">
@@ -206,20 +208,21 @@ class SummaryUI:
                 on_change=self.on_search
             ).props("outlined dense").classes("w-64 mb-4")
                         
-            self.chip_summary_table = ui.table(
-                columns=[
-                    {"name": "code", "label": "股票代码", "field": "code", "sortable": True, "align": "center"},
-                    {"name": "name", "label": "股票", "field": "name", "sortable": True},
-                    {"name": "float_shares", "label": "自由流通(亿)", "field": "float_shares", "sortable": True, "align": "center"}, 
-                    {"name": "total_buy", "label": "总买入", "field": "total_buy", "sortable": True}, 
-                    {"name": "total_sell", "label": "总卖出", "field": "total_sell", "sortable": True},
-                    {"name": "hold_volume", "label": "当前持仓", "field": "hold_volume", "sortable": True},
-                    {"name": "current_invest", "label": "当前投入", "field": "current_invest", "sortable": True},
-                    {"name": "net_profit", "label": "实现盈利", "field": "net_profit", "sortable": True},
-                ],
-                rows=[],
-                row_key="summary_key"
-            ).classes("h-[600px] w-full")
+            with ui.expansion('筹码统计列表', icon='list').classes('w-full border rounded-md'):
+                self.chip_summary_table = ui.table(
+                    columns=[
+                        {"name": "code", "label": "股票代码", "field": "code", "sortable": True, "align": "center"},
+                        {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                        {"name": "float_shares", "label": "自由流通(亿)", "field": "float_shares", "sortable": True, "align": "center"}, 
+                        {"name": "total_buy", "label": "总买入", "field": "total_buy", "sortable": True}, 
+                        {"name": "total_sell", "label": "总卖出", "field": "total_sell", "sortable": True},
+                        {"name": "hold_volume", "label": "当前持仓", "field": "hold_volume", "sortable": True},
+                        {"name": "current_invest", "label": "当前投入", "field": "current_invest", "sortable": True},
+                        {"name": "net_profit", "label": "实现盈利", "field": "net_profit", "sortable": True},
+                    ],
+                    rows=[],
+                    row_key="summary_key"
+                ).classes("max-h-[700px] w-full")
 
             self.chip_summary_table.add_slot("body-cell-code", '''
                 <q-td :props="props" @click.stop="$parent.$emit('edit_code', props.row)" class="cursor-pointer text-blue-500 font-medium">
@@ -280,20 +283,21 @@ class TradeTableUI:
                 on_change=self.on_search
             ).props("outlined dense").classes("w-64 mb-4")
 
-            self.table = ui.table(
-                columns=[
-                    {"name": "date", "label": "日期", "field": "date", "sortable": True},
-                    {"name": "time", "label": "时间", "field": "time", "sortable": True},
-                    {"name": "name", "label": "股票", "field": "name", "sortable": True},
-                    {"name": "action", "label": "动作", "field": "action", "align": "center"},
-                    {"name": "price", "label": "价格", "field": "price", "sortable": True},
-                    {"name": "volume", "label": "数量", "field": "volume", "sortable": True},
-                    {"name": "amount", "label": "金额", "field": "amount", "sortable": True},
-                    {"name": "operate", "label": "操作", "field": "operate", "align": "center"},
-                ],
-                rows=[],
-                row_key="id"
-            ).classes("h-[600px] w-full")
+            with ui.expansion('流水明细列表', icon='list').classes('w-full border rounded-md'):
+                self.table = ui.table(
+                    columns=[
+                        {"name": "date", "label": "日期", "field": "date", "sortable": True},
+                        {"name": "time", "label": "时间", "field": "time", "sortable": True},
+                        {"name": "name", "label": "股票", "field": "name", "sortable": True},
+                        {"name": "action", "label": "动作", "field": "action", "align": "center"},
+                        {"name": "price", "label": "价格", "field": "price", "sortable": True},
+                        {"name": "volume", "label": "数量", "field": "volume", "sortable": True},
+                        {"name": "amount", "label": "金额", "field": "amount", "sortable": True},
+                        {"name": "operate", "label": "操作", "field": "operate", "align": "center"},
+                    ],
+                    rows=[],
+                    row_key="id"
+                ).classes("max-h-[700px] w-full")
 
             self.table.add_slot("body-cell-action", '''
                 <q-td :props="props">
@@ -368,7 +372,7 @@ class BuyMatchDialogUI:
                 ],
                 rows=[],
                 row_key="buy_id"
-            ).classes("h-[400px] w-full")
+            ).classes("h-[400px]")
             
             self.available_buy_table.add_slot("body-cell-status", '''
                 <q-td :props="props">
