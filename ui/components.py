@@ -136,11 +136,14 @@ class SellMatchUI:
             self.sell_match_table.rows = rows
 
 class ChipPriceUI:
-    def __init__(self, on_gen_plot: Callable[..., Any]) -> None:
+    def __init__(self, on_gen_plot: Callable[..., Any], on_indicator_change: Callable[..., Any]) -> None:
         """UI for visualizing market chip distribution and holding details."""
         self.chip_price_table: ui.table | None = None
         self.chip_dist_plot: ui.plotly | None = None 
+        self.left_indicator: ui.select | None = None
+        self.right_indicator: ui.select | None = None
         self.on_gen_plot = on_gen_plot
+        self.on_indicator_change = on_indicator_change
         self._build()
     
     def _build(self) -> None:
@@ -169,8 +172,22 @@ class ChipPriceUI:
                     ''')
                 
                 with ui.column().classes("w-full"):
-                    with ui.row().classes("items-center gap-4 mb-2"):
-                        ui.label("筹码分布对比").classes("text-sm font-semibold")
+                    with ui.row().classes("items-center gap-2 mb-2 w-full"):
+                        ui.label("左图左轴:").classes("text-sm font-semibold")
+                        self.left_indicator = ui.select(
+                            options=["K线", "平均成本", "峰值价格", "获利比例", "集中度", "ASR穿透率", "交易量", "空"],
+                            value="K线",
+                            on_change=self.on_indicator_change
+                        ).props("dense outlined").classes("w-32")
+                        
+                        ui.label("左图右轴:").classes("text-sm font-semibold ml-2")
+                        self.right_indicator = ui.select(
+                            options=["K线", "平均成本", "峰值价格", "获利比例", "集中度", "ASR穿透率", "交易量", "空"],
+                            value="空",
+                            on_change=self.on_indicator_change
+                        ).props("dense outlined").classes("w-32")
+                        
+                        ui.space()
                         ui.button("生成分布图", icon="insights", on_click=self.on_gen_plot).props("outline dense color=primary")
                     # Placeholder figure to avoid empty init errors
                     self.chip_dist_plot = ui.plotly(figure=go.Figure()).classes("h-[600px] w-full")

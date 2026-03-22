@@ -51,11 +51,11 @@ class ChipDistVisualizer:
             return "Unknown"
             
         d = common.iloc[0]
-        if d <= 1: return "1min"
-        elif d <= 5: return "5min"
-        elif d <= 65: return "60min"
-        elif d <= 300: return "Daily"
-        return "Weekly"
+        if d <= 1: return "1分钟"
+        elif d <= 5: return "5分钟"
+        elif d <= 65: return "60分钟"
+        elif d <= 300: return "日"
+        return "周"
 
     def generate_distribution(self, df: pd.DataFrame) -> dict[str, Any]:
         """Process price data to generate chip distribution and freshness metrics."""
@@ -74,6 +74,10 @@ class ChipDistVisualizer:
         total_steps = len(df)
         survival_weight = np.ones(len(df))
         
+        hist_avg_cost, hist_peak_price = [], []
+        hist_profit_ratio, hist_concentration = [], []
+        hist_asr, hist_volume = [], []
+        
         # Iterative chip decay calculation
         for idx_int, (i, row) in enumerate(df.iterrows()):
             t_rate = float(row['turnover_rate'])
@@ -88,12 +92,49 @@ class ChipDistVisualizer:
             
             if idx_int < len(df) - 1:
                 survival_weight[:idx_int+1] *= (1 - t_rate)
+                
+            total_sum = np.sum(chips)
+            if total_sum > 0:
+                avg_p = np.sum(price_bins * chips) / total_sum
+                peak_p = price_bins[np.argmax(chips)]
+                
+                close_p = float(row['close'])
+                prof_r = np.sum(chips[price_bins <= close_p]) / total_sum * 100
+                
+                cumsum = np.cumsum(chips) / total_sum
+                idx_low = np.searchsorted(cumsum, 0.05)
+                idx_high = np.searchsorted(cumsum, 0.95)
+                idx_low = max(0, min(idx_low, len(price_bins) - 1))
+                idx_high = max(0, min(idx_high, len(price_bins) - 1))
+                p_low, p_high = price_bins[idx_low], price_bins[idx_high]
+                conc = (p_high - p_low) / (p_high + p_low) * 100 if (p_high + p_low) > 0 else 0
+                
+                open_p = float(row['open']) if 'open' in row else close_p
+                min_p_oc, max_p_oc = min(open_p, close_p), max(open_p, close_p)
+                if min_p_oc == max_p_oc:
+                    min_p_oc, max_p_oc = min_p_oc * 0.998, max_p_oc * 1.002
+                asr = np.sum(chips[(price_bins >= min_p_oc) & (price_bins <= max_p_oc)]) / total_sum * 100
+            else:
+                avg_p = peak_p = prof_r = conc = asr = 0
+
+            hist_avg_cost.append(avg_p)
+            hist_peak_price.append(peak_p)
+            hist_profit_ratio.append(prof_r)
+            hist_concentration.append(conc)
+            hist_asr.append(asr)
+            hist_volume.append(float(row['volume']) if 'volume' in row else 0.0)
 
         avg_freshness = np.divide(freshness_chips, chips, out=np.zeros_like(chips), where=chips > 0)
 
         # Apply survival threshold and smoothing
         start_idx_arr = np.where(survival_weight > self.decay_threshold)[0]
         start_idx = start_idx_arr[0] if len(start_idx_arr) > 0 else 0
+        df['avg_cost'] = hist_avg_cost
+        df['peak_price'] = hist_peak_price
+        df['profit_ratio_hist'] = hist_profit_ratio
+        df['concentration_hist'] = hist_concentration
+        df['asr_hist'] = hist_asr
+        df['vol_hist'] = hist_volume
         effective_df = df.iloc[start_idx:].copy()
 
         if self.smoothing > 0:
@@ -125,36 +166,84 @@ class ChipDistVisualizer:
         data: dict[str, Any], 
         own_chips: list[tuple[float, int]] = [], 
         cluster_threshold_prop: float = 0.02,  
-        max_hold_chip_xspan: float = 0.4
+        max_hold_chip_xspan: float = 0.4,
+        left_indicator: str = 'K线',
+        right_indicator: str = '空',
+        stock_name: str = ""
     ) -> go.Figure:
         """Render a dual-pane Plotly figure showing K-line and chip distribution."""
         if not data:
             return go.Figure()
 
+        prefix = f"[{stock_name}] " if stock_name else ""
         main_title = (
-            f"{data['interval']} K线"
+            f"{prefix}{data['interval']}K线"
             f"<br>起点: {data['start_date'].strftime('%Y-%m-%d')}"
         )
 
         fig = make_subplots(
             rows=1, cols=2, 
-            shared_yaxes=True, 
-            column_widths=[0.7, 0.3], 
-            horizontal_spacing=0.01,
-            subplot_titles=[main_title, ""] 
+            shared_yaxes=False, 
+            column_widths=[0.75, 0.25], 
+            horizontal_spacing=0.08,
+            subplot_titles=[main_title, ""],
+            specs=[[{"secondary_y": True}, {"secondary_y": False}]]
         )
 
+        edf = data["effective_df"]
+        
+        def create_trace(ind_name: str, is_left: bool) -> go.Scatter | go.Bar | None:
+            if not ind_name or ind_name == '空':
+                return None
+                
+            color = '#2196F3' if is_left else '#FF9800'
+            dash = 'solid' if is_left else 'dot'
+            bar_color = 'rgba(33, 150, 243, 0.4)' if is_left else 'rgba(255, 152, 0, 0.4)'
+            
+            y_col = ""
+            name_suffix = "(%)" if ind_name in ['获利比例', '集中度', 'ASR穿透率'] else ""
+            full_name = f"{ind_name}{name_suffix}"
+            
+            if ind_name == 'K线': y_col = 'close'
+            elif ind_name == '平均成本': y_col = 'avg_cost'
+            elif ind_name == '峰值价格': y_col = 'peak_price'
+            elif ind_name == '获利比例': y_col = 'profit_ratio_hist'
+            elif ind_name == '集中度': y_col = 'concentration_hist'
+            elif ind_name == 'ASR穿透率': y_col = 'asr_hist'
+            elif ind_name == '交易量': y_col = 'vol_hist'
+            else: return None
+
+            if ind_name == '交易量':
+                return go.Bar(x=edf['day'], y=edf[y_col], name=full_name, marker_color=bar_color, customdata=edf['vol_hist'], hovertemplate="时间: %{x}<br>交易量: %{customdata}<extra></extra>")
+            else:
+                return go.Scatter(x=edf['day'], y=edf[y_col], name=full_name, line=dict(color=color, width=2, dash=dash))
+
         # Left pane: Price line
-        fig.add_trace(
-            go.Scatter(
-                x=data["effective_df"]['day'], 
-                y=data["effective_df"]['close'],
-                name='价格', 
-                line=dict(color='#2196F3', width=2), 
-                showlegend=False
-            ), 
-            row=1, col=1
-        )
+        tr_left = create_trace(left_indicator, True)
+        if tr_left:
+            fig.add_trace(tr_left, row=1, col=1, secondary_y=False)
+            
+        tr_right = create_trace(right_indicator, False)
+        if tr_right:
+            fig.add_trace(tr_right, row=1, col=1, secondary_y=True)
+            
+        price_inds = ['K线', '平均成本', '峰值价格']
+        pct_inds = ['获利比例', '集中度', 'ASR穿透率']
+        
+        def setup_yaxis(col_idx: int, sec_y: bool, ind_name: str) -> None:
+            if ind_name in price_inds:
+                # Matches mapping: y3 corresponds to Right Plot's main Y axis
+                fig.update_yaxes(matches='y3', row=1, col=col_idx, secondary_y=sec_y)
+            elif ind_name in pct_inds:
+                fig.update_yaxes(range=[0, 105], row=1, col=col_idx, secondary_y=sec_y)
+            elif ind_name == '交易量':
+                fig.update_yaxes(rangemode='tozero', row=1, col=col_idx, secondary_y=sec_y)
+            else:
+                fig.update_yaxes(showticklabels=False, showgrid=False, row=1, col=col_idx, secondary_y=sec_y)
+                
+        setup_yaxis(1, False, left_indicator)
+        setup_yaxis(1, True, right_indicator)
+        fig.update_yaxes(showgrid=False, row=1, col=1, secondary_y=True)
 
         # Right pane: Chip distribution bars
         bar_colors = []
@@ -215,7 +304,7 @@ class ChipDistVisualizer:
                         x=line_length, y=price,
                         text=f" {price:.2f} ({vol/100:.0f}手)",
                         showarrow=False, xanchor="left", yanchor="middle",
-                        font=dict(size=10), xref="x2", yref="y2"
+                        font=dict(size=10), xref="x2", yref="y3"
                     )
                 else:
                     prices = [c[0] for c in cluster]
@@ -240,7 +329,7 @@ class ChipDistVisualizer:
                         text=f" <b>{avg_p:.2f} ({total_vol/100:.0f}手)</b>",
                         showarrow=False, xanchor="left", yanchor="middle",
                         font=dict(size=10), 
-                        xref="x2", yref="y2"
+                        xref="x2", yref="y3"
                     )
 
         # Static reference lines
@@ -248,8 +337,7 @@ class ChipDistVisualizer:
             y=data['last_price'], 
             line_dash="dot", 
             line_color="red", 
-            row=1,  # type: ignore
-            col=1,  # type: ignore
+            row=1, col=2,
             annotation_text=f"最新价:{data['last_price']:.2f}"
         )
         
@@ -257,8 +345,7 @@ class ChipDistVisualizer:
             y=data["avg_price"], 
             line_dash="dot", 
             line_color="black", 
-            row=1,  # type: ignore
-            col=1,  # type: ignore
+            row=1, col=2,
             annotation_text=f"平均成本:{data['avg_price']:.2f}"
         )
 
@@ -272,20 +359,25 @@ class ChipDistVisualizer:
             showarrow=False, align="right", bgcolor="rgba(255, 255, 255, 0.9)", borderwidth=1
         )
 
-        fig.update_yaxes(range=data["y_range"], row=1, col=1)
+        fig.update_yaxes(side='right', range=data["y_range"], row=1, col=2)
+        
         fig.update_layout(
             template="plotly_white", 
             margin=dict(l=10, r=10, t=80, b=10),
-            hovermode="y unified",
+            hovermode="closest",
             dragmode='pan',
             xaxis=dict(fixedrange=False),
-            yaxis=dict(fixedrange=True),
             modebar=dict(
                 remove=['zoom2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d']
             ), 
             height=500, 
             autosize=True,
         )
+        
+        fig.update_yaxes(fixedrange=True)
+        fig.update_xaxes(fixedrange=False, row=1, col=1)
+        fig.update_xaxes(fixedrange=True, row=1, col=2)
+        
         return fig
 
 if __name__ == "__main__":

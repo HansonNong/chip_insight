@@ -76,8 +76,10 @@ class ChipInSightApp:
                 on_auto_match=self._handle_auto_match,
                 on_clear_matches=self._handle_clear_matches
             )
+
             self.chip_price_ui = ChipPriceUI(
-                on_gen_plot=lambda: self.refresh_chip_dist_plot(auto_popup=True)
+                on_gen_plot=lambda: self.refresh_chip_dist_plot(auto_popup=True),
+                on_indicator_change=self._on_indicator_switch_change
             )
 
             self.summary_ui = SummaryUI(
@@ -136,6 +138,9 @@ class ChipInSightApp:
         self.current_selected_stock = str(stock_name)
         await self.refresh_sell_match_table()
         await self.refresh_chip_price()
+
+    async def _on_indicator_switch_change(self, e: Any) -> None:
+        await self.refresh_chip_dist_plot(auto_popup=False)
 
     async def refresh_sell_match_table(self) -> None:
         """Fetch and display sell records with match status."""
@@ -438,40 +443,29 @@ class ChipInSightApp:
             return
 
         own_chips = await self.get_own_chips(self.current_selected_stock)
+        
+        left_ind = self.chip_price_ui.left_indicator.value if self.chip_price_ui.left_indicator else "K线"
+        right_ind = self.chip_price_ui.right_indicator.value if self.chip_price_ui.right_indicator else "空"
+        
         fig = await asyncio.to_thread(
             self.chip_visualizer.render_plot,
             data=dist_data,
-            own_chips=own_chips
+            own_chips=own_chips,
+            left_indicator=left_ind,
+            right_indicator=right_ind,
+            stock_name=self.current_selected_stock
         )
 
         if own_chips:
             own_prices = [p for p, vol in own_chips if vol != 0]
             if own_prices:
                 min_own, max_own = min(own_prices), max(own_prices)
-                
-                yaxis = getattr(fig.layout, 'yaxis', None)
-                y_range = getattr(yaxis, 'range', None)
-                if y_range and len(y_range) == 2:
-                    try:
-                        new_min = min(float(y_range[0]), min_own * 0.95)
-                        new_max = max(float(y_range[1]), max_own * 1.05)
-                        fig.update_yaxes(range=[new_min, new_max])
-                    except (ValueError, TypeError):
-                        pass
-                else:
-                    y_vals = []
-                    for trace in fig.data:
-                        if getattr(trace, 'y', None) is not None:
-                            for y in trace.y:
-                                try:
-                                    if y is not None:
-                                        y_vals.append(float(y))
-                                except (ValueError, TypeError):
-                                    pass
-                    if y_vals:
-                        new_min = min(min(y_vals), min_own) * 0.95
-                        new_max = max(max(y_vals), max_own) * 1.05
-                        fig.update_yaxes(range=[new_min, new_max])
+                try:
+                    new_min = min(float(dist_data["y_range"][0]), min_own * 0.95)
+                    new_max = max(float(dist_data["y_range"][1]), max_own * 1.05)
+                    fig.update_yaxes(range=[new_min, new_max], row=1, col=2)
+                except (ValueError, TypeError):
+                    pass
 
         self.chip_price_ui.set_chip_plot(fig)
 
