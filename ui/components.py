@@ -175,14 +175,14 @@ class ChipPriceUI:
                     with ui.row().classes("items-center gap-2 mb-2 w-full"):
                         ui.label("左图左轴:").classes("text-sm font-semibold")
                         self.left_indicator = ui.select(
-                            options=["K线", "平均成本", "峰值价格", "获利比例", "集中度", "ASR穿透率", "交易量", "空"],
-                            value="K线",
+                            options=["平均成本", "峰值价格", "获利比例", "集中度", "ASR穿透率", "交易量", "空"],
+                            value="空",
                             on_change=self.on_indicator_change
                         ).props("dense outlined").classes("w-32")
                         
                         ui.label("左图右轴:").classes("text-sm font-semibold ml-2")
                         self.right_indicator = ui.select(
-                            options=["K线", "平均成本", "峰值价格", "获利比例", "集中度", "ASR穿透率", "交易量", "空"],
+                            options=["平均成本", "峰值价格", "获利比例", "集中度", "ASR穿透率", "交易量", "空"],
                             value="空",
                             on_change=self.on_indicator_change
                         ).props("dense outlined").classes("w-32")

@@ -167,7 +167,7 @@ class ChipDistVisualizer:
         own_chips: list[tuple[float, int]] = [], 
         cluster_threshold_prop: float = 0.02,  
         max_hold_chip_xspan: float = 0.4,
-        left_indicator: str = 'K线',
+        left_indicator: str = '空',
         right_indicator: str = '空',
         stock_name: str = ""
     ) -> go.Figure:
@@ -204,8 +204,7 @@ class ChipDistVisualizer:
             name_suffix = "(%)" if ind_name in ['获利比例', '集中度', 'ASR穿透率'] else ""
             full_name = f"{ind_name}{name_suffix}"
             
-            if ind_name == 'K线': y_col = 'close'
-            elif ind_name == '平均成本': y_col = 'avg_cost'
+            if ind_name == '平均成本': y_col = 'avg_cost'
             elif ind_name == '峰值价格': y_col = 'peak_price'
             elif ind_name == '获利比例': y_col = 'profit_ratio_hist'
             elif ind_name == '集中度': y_col = 'concentration_hist'
@@ -222,16 +221,38 @@ class ChipDistVisualizer:
             else:
                 return go.Scatter(x=edf['day'], y=edf[y_col], name=full_name, line=dict(color=color, width=2, dash=dash))
 
-        # Left pane: Price line
+        fig.update_layout(
+            yaxis4=dict(
+                overlaying='y1',
+                anchor='x1',
+                matches='y3',
+                showgrid=False,
+                showticklabels=False
+            )
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=edf['day'], y=edf['close'], name='K线',
+                line=dict(color='#333333', width=1.5),
+                hovertemplate="时间: %{x}<br>价格: %{y:.2f}<extra></extra>",
+                xaxis='x1',
+                yaxis='y4'
+            )
+        )
+
+        # Left pane: Selected Indicators
         tr_left = create_trace(left_indicator, True)
-        if tr_left:
-            fig.add_trace(tr_left, row=1, col=1, secondary_y=False)
+        if tr_left is None:
+            tr_left = go.Scatter(x=[], y=[], showlegend=False, hoverinfo='skip')
+        fig.add_trace(tr_left, row=1, col=1, secondary_y=False)
             
         tr_right = create_trace(right_indicator, False)
-        if tr_right:
-            fig.add_trace(tr_right, row=1, col=1, secondary_y=True)
+        if tr_right is None:
+            tr_right = go.Scatter(x=[], y=[], showlegend=False, hoverinfo='skip')
+        fig.add_trace(tr_right, row=1, col=1, secondary_y=True)
             
-        price_inds = ['K线', '平均成本', '峰值价格']
+        price_inds = ['平均成本', '峰值价格']
         fixed_pct_inds = ['获利比例', 'ASR穿透率']
         auto_zero_inds = ['集中度', '交易量']
         

@@ -453,7 +453,7 @@ class ChipInSightApp:
 
         own_chips = await self.get_own_chips(self.current_selected_stock)
         
-        left_ind = self.chip_price_ui.left_indicator.value if self.chip_price_ui.left_indicator else "K线"
+        left_ind = self.chip_price_ui.left_indicator.value if self.chip_price_ui.left_indicator else "空"
         right_ind = self.chip_price_ui.right_indicator.value if self.chip_price_ui.right_indicator else "空"
         
         fig = await asyncio.to_thread(
