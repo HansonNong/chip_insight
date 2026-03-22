@@ -40,7 +40,7 @@ def timeout_handler(seconds: int) -> Callable:
 
 @timeout_handler(seconds=10)
 def get_stock_data(
-    symbol: str, 
+    symbol: str,
     period: int = 60, 
     manual_float_shares: float = 0
 ) -> tuple[pd.DataFrame | None, str]:
@@ -53,7 +53,7 @@ def get_stock_data(
     if symbol.startswith(("sh", "sz")):
         code = symbol
     else:
-        code = f"sh{pure_symbol}" if pure_symbol.startswith("6") else f"sz{pure_symbol}"
+        code = f"sh{pure_symbol}" if symbol.startswith("6") else f"sz{pure_symbol}"
 
     # Get float shares for turnover calculation
     if manual_float_shares > 0:
@@ -66,7 +66,7 @@ def get_stock_data(
             print(f"获取流通股失败: {e}")
             return None, code
 
-    # Fetch minute-level K-line data
+   # Fetch minute-level K-line data
     try:
         df = ak.stock_zh_a_minute(symbol=code, period=str(period), adjust="qfq")
     except Exception as e:
@@ -84,8 +84,70 @@ def get_stock_data(
     # Calculate turnover rate
     df['turnover_rate'] = df['volume'] / float_shares
     df = df.drop_duplicates(keep="last").sort_index().reset_index(drop=True)
-    
+
     return df, code
+
+
+def get_stock_data_cached(
+    symbol: str,
+    period: int = 60,
+    manual_float_shares: float = 0,
+    cache_dir: str = "./cache",
+) -> tuple[pd.DataFrame | None, str]:
+    """Fetch market data with caching mechanism."""
+    pure_symbol = re.sub(r"[^0-9]", "", symbol)
+    if not pure_symbol:
+        return None, ""
+
+    code = f"sh{pure_symbol}" if symbol.startswith("6") else f"sz{pure_symbol}"
+    cache_file = os.path.join(cache_dir, f"{code}_{period}m.parquet")
+
+    # Check if cache directory exists and create if not
+    os.makedirs(cache_dir, exist_ok=True)
+
+    # Check if cache file exists and is recent
+    if os.path.exists(cache_file):
+        file_modified_time = datetime.fromtimestamp(os.path.getmtime(cache_file))
+        cache_valid_until = file_modified_time + timedelta(hours=1)
+
+        if datetime.now() <= cache_valid_until:
+            try:
+                df = pd.read_parquet(cache_file)
+                print(f"Loaded K-line data for {symbol} from cache.")
+                return df, code
+            except Exception as e:
+                print(f"Error loading cached data: {e}")
+                os.remove(cache_file)  # Remove corrupted cache file
+        else:
+            print(f"Cache for {symbol} expired, fetching new data.")
+
+    # If cache doesn't exist or is outdated, fetch new data
+    df, code = get_stock_data(symbol, period, manual_float_shares)
+
+    if df is not None and not df.empty:
+        try:
+            df.to_parquet(cache_file)
+            print(f"Saved K-line data for {symbol} to cache.")
+        except Exception as e:
+            print(f"Error saving data to cache: {e}")
+
+    return df, code
+
+
+
+def get_cache_info(symbol: str, period: int = 60, cache_dir: str = "./cache") -> str | None:
+    """Return cache modification time if valid, else None."""
+    pure_symbol = re.sub(r"[^0-9]", "", symbol)
+    if not pure_symbol:
+        return None
+    code = f"sh{pure_symbol}" if symbol.startswith("6") else f"sz{pure_symbol}"
+    cache_file = os.path.join(cache_dir, f"{code}_{period}m.parquet")
+    
+    if os.path.exists(cache_file):
+        mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
+        if datetime.now() <= mtime + timedelta(hours=1):
+            return mtime.strftime('%Y-%m-%d %H:%M:%S')
+    return None
 
 
 def get_all_a_shares_map(cache_dir: str = "./db") -> dict[str, str]:
@@ -115,6 +177,7 @@ def get_all_a_shares_map(cache_dir: str = "./db") -> dict[str, str]:
         return {}
 
     
+
 if __name__ == "__main__":
     my_symbol = "603667" 
     target_dir = "./cache"

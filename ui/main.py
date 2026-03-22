@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from nicegui import Client, events, ui
 import pandas as pd
 
-from core.fetch_data import get_stock_data
+from core.fetch_data import get_stock_data_cached, get_cache_info
 from core.parse_input import TradeImageParser
 from core.visualize_cost import ChipDistVisualizer
 from db.database import TradeDatabase
@@ -414,15 +414,24 @@ class ChipInSightApp:
                 await self._edit_float_shares(row.to_dict())
             return
 
-        ui.notify(
-            f"正在获取 {self.current_selected_stock} 行情数据...",
-            position="left",
-            duration=1
-        )
+        cache_time = await asyncio.to_thread(get_cache_info, stock_code, 60)
+        if cache_time:
+            ui.notify(
+                f"已使用缓存: {self.current_selected_stock} 行情 ({cache_time})",
+                type='info',
+                position="left",
+                duration=1.5
+            )
+        else:
+            ui.notify(
+                f"正在获取 {self.current_selected_stock} 行情数据...",
+                position="left",
+                duration=1
+            )
         await asyncio.sleep(0.1)
 
         kline_df, _ = await asyncio.to_thread(
-            get_stock_data, stock_code, 60, float_shares
+            get_stock_data_cached, stock_code, 60, float_shares
         )
 
         if kline_df is None or kline_df.empty:

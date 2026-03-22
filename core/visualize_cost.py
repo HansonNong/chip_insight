@@ -175,7 +175,7 @@ class ChipDistVisualizer:
         if not data:
             return go.Figure()
 
-        prefix = f"[{stock_name}] " if stock_name else ""
+        prefix = f"{stock_name} " if stock_name else ""
         main_title = (
             f"{prefix}{data['interval']}K线"
             f"<br>起点: {data['start_date'].strftime('%Y-%m-%d')}"
