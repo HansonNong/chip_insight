@@ -214,7 +214,11 @@ class ChipDistVisualizer:
             else: return None
 
             if ind_name == '交易量':
-                return go.Bar(x=edf['day'], y=edf[y_col], name=full_name, marker_color=bar_color, customdata=edf['vol_hist'], hovertemplate="时间: %{x}<br>交易量: %{customdata}<extra></extra>")
+                return go.Scatter(
+                    x=edf['day'], y=edf[y_col], name=full_name, mode='lines', 
+                    line=dict(color=color, width=1), 
+                    hovertemplate="时间: %{x}<br>交易量: %{y}<extra></extra>"
+                )
             else:
                 return go.Scatter(x=edf['day'], y=edf[y_col], name=full_name, line=dict(color=color, width=2, dash=dash))
 
@@ -228,16 +232,17 @@ class ChipDistVisualizer:
             fig.add_trace(tr_right, row=1, col=1, secondary_y=True)
             
         price_inds = ['K线', '平均成本', '峰值价格']
-        pct_inds = ['获利比例', '集中度', 'ASR穿透率']
+        fixed_pct_inds = ['获利比例', 'ASR穿透率']
+        auto_zero_inds = ['集中度', '交易量']
         
         def setup_yaxis(col_idx: int, sec_y: bool, ind_name: str) -> None:
             if ind_name in price_inds:
                 # Matches mapping: y3 corresponds to Right Plot's main Y axis
                 fig.update_yaxes(matches='y3', row=1, col=col_idx, secondary_y=sec_y)
-            elif ind_name in pct_inds:
+            elif ind_name in fixed_pct_inds:
                 fig.update_yaxes(range=[0, 105], row=1, col=col_idx, secondary_y=sec_y)
-            elif ind_name == '交易量':
-                fig.update_yaxes(rangemode='tozero', row=1, col=col_idx, secondary_y=sec_y)
+            elif ind_name in auto_zero_inds:
+                fig.update_yaxes(autorange=True, rangemode='tozero', row=1, col=col_idx, secondary_y=sec_y)
             else:
                 fig.update_yaxes(showticklabels=False, showgrid=False, row=1, col=col_idx, secondary_y=sec_y)
                 
