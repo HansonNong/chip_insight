@@ -408,6 +408,14 @@ class ChipDistVisualizer:
             ), 
             height=500, 
             autosize=True,
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=0.99,
+                xanchor="left",
+                x=0.01,
+                bgcolor="rgba(255, 255, 255, 0.8)"
+            )
         )
         
         fig.update_yaxes(fixedrange=True)
