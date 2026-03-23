@@ -192,7 +192,12 @@ class ChipDistVisualizer:
 
         edf = data["effective_df"]
         
-        def create_trace(ind_name: str, is_left: bool) -> go.Scatter | go.Bar | None:
+        def create_trace(
+            ind_name: str, 
+            is_left: bool, 
+            opacity: float = 0.6
+        ) -> go.Scatter | go.Bar | None:
+            
             if not ind_name or ind_name == '空':
                 return None
                 
@@ -216,10 +221,15 @@ class ChipDistVisualizer:
                 return go.Scatter(
                     x=edf['day'], y=edf[y_col], name=full_name, mode='lines', 
                     line=dict(color=color, width=1), 
+                    opacity=opacity,
                     hovertemplate="时间: %{x}<br>交易量: %{y}<extra></extra>"
                 )
             else:
-                return go.Scatter(x=edf['day'], y=edf[y_col], name=full_name, line=dict(color=color, width=2, dash=dash))
+                return go.Scatter(
+                    x=edf['day'], y=edf[y_col], name=full_name, 
+                    line=dict(color=color, width=2, dash=dash),
+                    opacity=opacity,
+                )
 
         fig.update_layout(
             yaxis4=dict(
