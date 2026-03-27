@@ -56,7 +56,7 @@ class ChipInSightApp:
 
         ui.add_head_html(
             '<meta name="viewport" content="width=device-width, '
-            'initial-scale=0.6, maximum-scale=1.0">'
+            'initial-scale=0.6, maximum-scale=1.0, user-scalable=no">'
         )
 
         container_style = (
@@ -98,16 +98,11 @@ class ChipInSightApp:
                     lambda e: self._edit_float_shares(e.args) 
                 )
 
-            self.trade_table_ui = TradeTableUI(on_search=self.refresh_table)
-            if self.trade_table_ui.table:
-                self.trade_table_ui.table.on(
-                    'update_trade', 
-                    lambda e: self._handle_trade_update(e.args)
-                )
-                self.trade_table_ui.table.on(
-                    'delete_trade',
-                    lambda e: self._handle_trade_delete(e.args)
-                )
+            self.trade_table_ui = TradeTableUI(
+                on_search=self.refresh_table,
+                on_update=self._handle_trade_update,
+                on_delete=self._handle_trade_delete
+            )
 
         self.buy_dialog = BuyMatchDialogUI(on_match=self._do_match)
 

@@ -1,6 +1,7 @@
 from nicegui import ui
 from typing import Callable, Any
 import plotly.graph_objects as go
+import inspect
 
 class HeaderUI:
     def __init__(self, on_refresh: Callable[..., Any], on_clear: Callable[..., Any]) -> None:
@@ -285,11 +286,13 @@ class SummaryUI:
             self.chip_summary_table.rows = rows
 
 class TradeTableUI:
-    def __init__(self, on_search: Callable[..., Any]) -> None:
+    def __init__(self, on_search: Callable[..., Any], on_update: Callable[..., Any], on_delete: Callable[..., Any]) -> None:
         """Detailed transaction ledger with search capability."""
         self.search_input: ui.input | None = None
         self.table: ui.table | None = None
         self.on_search = on_search
+        self.on_update = on_update
+        self.on_delete = on_delete
         self._build()
 
     def _build(self) -> None:
@@ -324,33 +327,18 @@ class TradeTableUI:
                 </q-td>
             ''')
 
-            text_slot_template = '''
-                <q-td :props="props" class="cursor-pointer">
+            edit_slot_template = '''
+                <q-td :props="props" class="cursor-pointer" @click.stop="$parent.$emit('request_edit', {{'id': props.row.id, 'field': '{field}', 'value': props.value}})">
                     {{{{ props.value }}}}
                     <q-icon name="edit" size="xs" class="ml-1 text-grey-5" />
-                    <q-popup-edit v-model="props.row.{field}" v-slot="scope" 
-                                  @save="(val) => $parent.$emit('update_trade', {{'id': props.row.id, 'field': '{field}', 'value': val}})">
-                        <q-input v-model="scope.value" dense autofocus @keyup.enter="scope.set" {input_props} />
-                    </q-popup-edit>
                 </q-td>
             '''
             
-            number_slot_template = '''
-                <q-td :props="props" class="cursor-pointer">
-                    {{{{ props.value }}}}
-                    <q-icon name="edit" size="xs" class="ml-1 text-grey-5" />
-                    <q-popup-edit v-model.number="props.row.{field}" v-slot="scope" 
-                                  @save="(val) => $parent.$emit('update_trade', {{'id': props.row.id, 'field': '{field}', 'value': val}})">
-                        <q-input type="number" v-model.number="scope.value" dense autofocus @keyup.enter="scope.set" />
-                    </q-popup-edit>
-                </q-td>
-            '''
-
-            self.table.add_slot('body-cell-date', text_slot_template.format(field='date', input_props='mask="####-##-##"'))
-            self.table.add_slot('body-cell-time', text_slot_template.format(field='time', input_props='mask="##:##:##"'))
-            self.table.add_slot('body-cell-name', text_slot_template.format(field='name', input_props=''))
-            self.table.add_slot('body-cell-price', number_slot_template.format(field='price'))
-            self.table.add_slot('body-cell-volume', number_slot_template.format(field='volume'))
+            self.table.add_slot('body-cell-date', edit_slot_template.format(field='date'))
+            self.table.add_slot('body-cell-time', edit_slot_template.format(field='time'))
+            self.table.add_slot('body-cell-name', edit_slot_template.format(field='name'))
+            self.table.add_slot('body-cell-price', edit_slot_template.format(field='price'))
+            self.table.add_slot('body-cell-volume', edit_slot_template.format(field='volume'))
             
             self.table.add_slot('body-cell-operate', '''
                 <q-td :props="props">
@@ -358,6 +346,56 @@ class TradeTableUI:
                            @click.stop="$parent.$emit('delete_trade', props.row.id)" />
                 </q-td>
             ''')
+
+            self.table.on('request_edit', self._open_edit_dialog)
+            self.table.on('delete_trade', lambda e: self.on_delete(e.args))
+
+    def _open_edit_dialog(self, e: Any) -> None:
+        data = e.args
+        row_id = data.get('id')
+        field = data.get('field')
+        value = data.get('value')
+
+        field_labels = {
+            'date': '日期',
+            'time': '时间',
+            'name': '股票',
+            'price': '价格',
+            'volume': '数量'
+        }
+        label = field_labels.get(field, field)
+
+        with ui.dialog() as dialog, ui.card().classes("p-6 w-[350px]"):
+            ui.label(f"编辑{label}").classes("text-lg font-bold mb-4")
+            
+            if field in ['price', 'volume']:
+                inp = ui.number(
+                    label=label, 
+                    value=value,
+                    format="%.2f" if field == 'price' else "%.0f"
+                ).props("outlined dense autofocus w-full mb-4")
+            else:
+                inp = ui.input(
+                    label=label, 
+                    value=value
+                ).props("outlined dense autofocus w-full mb-4")
+                if field == 'date':
+                    inp.props('mask="####-##-##" fill-mask="YYYY-MM-DD"')
+                elif field == 'time':
+                    inp.props('mask="##:##:##" fill-mask="HH:MM:SS"')
+
+            async def _save() -> None:
+                new_val = inp.value
+                dialog.close()
+                res = self.on_update({'id': row_id, 'field': field, 'value': new_val})
+                if inspect.isawaitable(res):
+                    await res
+
+            with ui.row().classes("justify-end gap-3 mt-4 w-full"):
+                ui.button("取消", on_click=dialog.close).props("flat")
+                ui.button("保存修改", on_click=_save, color="blue-6")
+                
+        dialog.open()
 
 
     def get_search_keyword(self) -> str:
